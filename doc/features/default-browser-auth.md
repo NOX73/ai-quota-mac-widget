@@ -1,5 +1,12 @@
 # Default Browser Authorization Flow
 
+> **Update**: the manual token paste UI referenced below (the token input field, the "Manual
+> Token Input" picker, `saveToken(_:)`) was removed entirely — see
+> [`ui-customization.md`](ui-customization.md). Claude connects via the automatic localhost OAuth
+> flow (`oauth-localhost-flow.md`); OpenAI and Google AI Plus have no way to complete a connection
+> until they get an equivalent flow of their own. The rest of this doc (opening the system
+> browser, `BrowserAuthSheetView`, removing the legacy Keychain fallback) is still accurate.
+
 ## Overview
 Initially, authorization for providers was handled in an embedded `WKWebView` modal (`OAuthWebView`). Identity providers like Google block logins inside embedded webviews (`disallowed_useragent`), preventing users from authenticating via Google Sign-In, Passkeys, 2FA, or corporate SSO.
 

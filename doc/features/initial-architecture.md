@@ -1,5 +1,13 @@
 # Подробный план реализации: AIQuota (Claude, OpenAI, Google AI Plus)
 
+> **Статус: исторический план, частично устарел.** Файловая структура ниже (`Auth/OpenAIAuthFlow.swift`,
+> `Auth/GoogleAuthFlow.swift`, `Models/QuotaPeriod.swift`, `Models/ProviderStatus.swift`) не совпадает
+> с тем, что реально реализовано (единый `Models/QuotaModels.swift`, ручной ввод токена вместо
+> отдельных auth-flow для OpenAI/Google — впоследствии тоже удалён). Раздел 4 (UI: символы в
+> менюбаре, фиксированные пороги 50/80%, чекбокс "Подключено") описывает более раннюю версию —
+> актуальное поведение см. в [`ui-customization.md`](ui-customization.md) и
+> [`popover-reactivity-fixes.md`](popover-reactivity-fixes.md). Оставлено как есть для истории.
+
 Данный документ содержит технический план расширения виджета macOS для отслеживания лимитов подписок трех независимых провайдеров (Claude, OpenAI ChatGPT, Google AI Plus) без зависимости от CLI-утилит.
 
 ---

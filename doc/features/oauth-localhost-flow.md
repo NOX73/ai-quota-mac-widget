@@ -29,14 +29,18 @@ Instead of requiring users to copy and paste authorization codes or tokens manua
 
 - Access token, refresh token, and expiry are stored separately in Keychain under `claude_oauth_token`, `claude_oauth_refresh_token`, and `claude_oauth_expires_at` (see `ClaudeProvider`).
 - Before each quota fetch, `ClaudeProvider.refresh()` proactively renews the access token if it's within 60s of `expires_in`. If a fetch still comes back `401` (e.g. clock drift, revoked token), it retries the refresh once and re-fetches before falling back to `.requiresReauth`.
-- A refresh only works if a refresh token was captured, which only happens via the OAuth browser flow — tokens pasted manually through "Manual Token Input" have no refresh counterpart and will require re-pasting once they expire.
+- A refresh only works if a refresh token was captured, which only happens via this OAuth browser
+  flow. (Manual token paste — which had no refresh counterpart — was removed entirely; see
+  [`ui-customization.md`](ui-customization.md).)
    - Persists the access token into macOS Keychain (`claude_oauth_token`).
+- If the usage fetch still 401s after that retry, `ClaudeProvider.refresh()` now surfaces
+  `.requiresReauth` instead of leaving the provider stuck showing "Connected" with permanently
+  empty periods — see [`popover-reactivity-fixes.md`](popover-reactivity-fixes.md) (bug #4).
 
 3. **`ClaudeProvider` & `SettingsView` (`Sources/ClaudeQuota/Providers/ClaudeProvider.swift` & `App/SettingsView.swift`)**:
    - `ClaudeProvider` exposes `startOAuthLogin()` and observes `authFlow` state.
    - `BrowserAuthSheetView` displays live status ("Listening on http://localhost:54321/callback...").
    - Automatically closes the modal once connection succeeds.
-   - Keeps manual token input available as a fallback option.
 
 ## Verification
 - Built and compiled using `swift build` and `./scripts/build_app.sh`.
