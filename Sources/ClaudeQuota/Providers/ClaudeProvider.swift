@@ -136,7 +136,12 @@ public final class ClaudeProvider: ObservableObject, QuotaProvider {
 
         if httpStatus == 401 {
             if await attemptTokenRefresh(), let refreshedToken = getToken() {
-                _ = await fetchUsage(token: refreshedToken)
+                let retryStatus = await fetchUsage(token: refreshedToken)
+                if retryStatus == 401 {
+                    // The refreshed token is still rejected by the usage endpoint — don't leave
+                    // the provider stuck showing "Connected" with permanently empty periods.
+                    status = .requiresReauth
+                }
             } else {
                 status = .requiresReauth
             }

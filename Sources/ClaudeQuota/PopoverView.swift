@@ -33,7 +33,9 @@ public struct PopoverView: View {
 
             ScrollView {
                 VStack(spacing: 16) {
-                    let connectedProviders = service.providers.filter { $0.status.isConnected }
+                    // Include providers that need re-auth too, so users see *why* their
+                    // usage stopped loading instead of the card silently disappearing.
+                    let connectedProviders = service.providers.filter { $0.status.isConnected || $0.status == .requiresReauth }
 
                     if connectedProviders.isEmpty {
                         VStack(spacing: 10) {
