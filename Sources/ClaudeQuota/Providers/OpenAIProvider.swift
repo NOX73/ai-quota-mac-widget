@@ -18,9 +18,6 @@ public final class OpenAIProvider: ObservableObject, QuotaProvider {
     // field — each distinct item needs its own one-time "Always Allow" authorization from
     // macOS, so one item per provider means one prompt per provider instead of three.
     private let stateKey = "openai_oauth_state"
-    private static let legacyTokenKey = "openai_oauth_token"
-    private static let legacyRefreshTokenKey = "openai_oauth_refresh_token"
-    private static let legacyAccountIDKey = "openai_oauth_account_id"
 
     private struct StoredState: Codable {
         var accessToken: String
@@ -29,7 +26,6 @@ public final class OpenAIProvider: ObservableObject, QuotaProvider {
     }
 
     public init() {
-        migrateLegacyKeysIfNeeded()
         checkInitialStatus()
     }
 
@@ -58,22 +54,6 @@ public final class OpenAIProvider: ObservableObject, QuotaProvider {
             return
         }
         _ = KeychainService.shared.save(key: stateKey, value: raw)
-    }
-
-    /// One-time migration from the old one-item-per-field scheme to the consolidated one above.
-    private func migrateLegacyKeysIfNeeded() {
-        guard loadState() == nil,
-              let legacyToken = KeychainService.shared.load(key: Self.legacyTokenKey), !legacyToken.isEmpty else {
-            return
-        }
-        saveState(StoredState(
-            accessToken: legacyToken,
-            refreshToken: KeychainService.shared.load(key: Self.legacyRefreshTokenKey),
-            accountID: KeychainService.shared.load(key: Self.legacyAccountIDKey)
-        ))
-        KeychainService.shared.delete(key: Self.legacyTokenKey)
-        KeychainService.shared.delete(key: Self.legacyRefreshTokenKey)
-        KeychainService.shared.delete(key: Self.legacyAccountIDKey)
     }
 
     public func startOAuthLogin() {

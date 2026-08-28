@@ -25,10 +25,6 @@ public final class AntigravityProvider: ObservableObject, QuotaProvider {
     // field — each distinct item needs its own one-time "Always Allow" authorization from
     // macOS, so one item per provider means one prompt per provider instead of four.
     private let stateKey = "antigravity_oauth_state"
-    private static let legacyTokenKey = "antigravity_oauth_token"
-    private static let legacyRefreshTokenKey = "antigravity_oauth_refresh_token"
-    private static let legacyExpiresAtKey = "antigravity_oauth_expires_at"
-    private static let legacyProjectIDKey = "antigravity_project_id"
 
     private struct StoredState: Codable {
         var accessToken: String
@@ -38,7 +34,6 @@ public final class AntigravityProvider: ObservableObject, QuotaProvider {
     }
 
     public init() {
-        migrateLegacyKeysIfNeeded()
         checkInitialStatus()
     }
 
@@ -72,25 +67,6 @@ public final class AntigravityProvider: ObservableObject, QuotaProvider {
             return
         }
         _ = KeychainService.shared.save(key: stateKey, value: raw)
-    }
-
-    /// One-time migration from the old one-item-per-field scheme to the consolidated one above.
-    private func migrateLegacyKeysIfNeeded() {
-        guard loadState() == nil,
-              let legacyToken = KeychainService.shared.load(key: Self.legacyTokenKey), !legacyToken.isEmpty else {
-            return
-        }
-        let legacyExpiresAt = KeychainService.shared.load(key: Self.legacyExpiresAtKey).flatMap(Double.init)
-        saveState(StoredState(
-            accessToken: legacyToken,
-            refreshToken: KeychainService.shared.load(key: Self.legacyRefreshTokenKey),
-            expiresAt: legacyExpiresAt,
-            projectID: KeychainService.shared.load(key: Self.legacyProjectIDKey)
-        ))
-        KeychainService.shared.delete(key: Self.legacyTokenKey)
-        KeychainService.shared.delete(key: Self.legacyRefreshTokenKey)
-        KeychainService.shared.delete(key: Self.legacyExpiresAtKey)
-        KeychainService.shared.delete(key: Self.legacyProjectIDKey)
     }
 
     public func startOAuthLogin() {
