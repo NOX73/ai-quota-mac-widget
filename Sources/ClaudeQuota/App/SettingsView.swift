@@ -300,9 +300,14 @@ struct BrowserAuthSheetView: View {
                 .foregroundStyle(.secondary)
 
             if let errorMsg = claudeProvider.authFlow.errorMessage {
-                Text("Error: \(errorMsg)")
-                    .font(.caption)
-                    .foregroundStyle(.red)
+                ScrollView {
+                    Text("Error Log:\n\(errorMsg)")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.red)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 100)
             }
 
             Button(action: {

@@ -42,8 +42,15 @@ public final class ClaudeAuthFlow: ObservableObject {
                     return
                 }
 
+                if let returnedState = queryParams["state"], returnedState != stateToken {
+                    let err = "State mismatch — possible CSRF, aborting"
+                    self.errorMessage = err
+                    completion(.failure(NSError(domain: "ClaudeAuth", code: -3, userInfo: [NSLocalizedDescriptionKey: err])))
+                    return
+                }
+
                 if let code = queryParams["code"] {
-                    self.exchangeCodeForToken(code: code, verifier: verifier, completion: completion)
+                    self.exchangeCodeForToken(code: code, state: queryParams["state"], verifier: verifier, completion: completion)
                 } else if let token = queryParams["token"] ?? queryParams["access_token"] {
                     completion(.success(token))
                 } else {
@@ -62,12 +69,13 @@ public final class ClaudeAuthFlow: ObservableObject {
         let redirectURI = "http://localhost:\(port)/callback"
         self.listeningURLString = redirectURI
 
-        var components = URLComponents(string: "https://claude.ai/oauth/authorize")!
+        var components = URLComponents(string: "https://claude.com/cai/oauth/authorize")!
         components.queryItems = [
+            URLQueryItem(name: "code", value: "true"),
             URLQueryItem(name: "response_type", value: "code"),
             URLQueryItem(name: "client_id", value: "xxxxxxx"),
             URLQueryItem(name: "redirect_uri", value: redirectURI),
-            URLQueryItem(name: "scope", value: "user:inference"),
+            URLQueryItem(name: "scope", value: "user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload"),
             URLQueryItem(name: "code_challenge", value: challenge),
             URLQueryItem(name: "code_challenge_method", value: "S256"),
             URLQueryItem(name: "state", value: stateToken)
@@ -85,45 +93,75 @@ public final class ClaudeAuthFlow: ObservableObject {
         listeningURLString = nil
     }
 
-    private func exchangeCodeForToken(code: String, verifier: String, completion: @escaping (Result<String, Error>) -> Void) {
-        guard let tokenEndpoint = URL(string: "https://api.anthropic.com/v1/oauth/tokens") else {
+    private func exchangeCodeForToken(code: String, state: String?, verifier: String, completion: @escaping (Result<String, Error>) -> Void) {
+        if code.hasPrefix("sk-") {
             completion(.success(code))
             return
         }
 
-        var request = URLRequest(url: tokenEndpoint)
+        let redirectURI = listeningURLString ?? "http://localhost:54321/callback"
+        let clientID = "xxxxxxx"
+
+        Task {
+            do {
+                let token = try await self.performTokenExchange(
+                    clientID: clientID,
+                    code: code,
+                    state: state,
+                    redirectURI: redirectURI,
+                    verifier: verifier
+                )
+                completion(.success(token))
+            } catch {
+                let errMsg = error.localizedDescription
+                await MainActor.run {
+                    self.errorMessage = errMsg
+                }
+                completion(.failure(error))
+            }
+        }
+    }
+
+    /// Mirrors the exact request the official Claude Code CLI sends (verified by inspecting its
+    /// shipped binary): JSON POST to platform.claude.com, redirect_uri equal to the loopback URL
+    /// actually used for the browser callback (not a fixed console URL).
+    private func performTokenExchange(
+        clientID: String,
+        code: String,
+        state: String?,
+        redirectURI: String,
+        verifier: String
+    ) async throws -> String {
+        let url = URL(string: "https://platform.claude.com/v1/oauth/token")!
+
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         let body: [String: Any] = [
             "grant_type": "authorization_code",
-            "client_id": "xxxxxxx",
             "code": code,
-            "redirect_uri": listeningURLString ?? "http://localhost:54321/callback",
-            "code_verifier": verifier
+            "redirect_uri": redirectURI,
+            "client_id": clientID,
+            "code_verifier": verifier,
+            "state": state ?? ""
         ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        guard let httpBody = try? JSONSerialization.data(withJSONObject: body) else {
-            completion(.success(code))
-            return
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw NSError(domain: "ClaudeAuth", code: -401, userInfo: [NSLocalizedDescriptionKey: "No HTTP response from token endpoint"])
         }
 
-        request.httpBody = httpBody
-
-        Task {
-            do {
-                let (data, response) = try await URLSession.shared.data(for: request)
-                if let http = response as? HTTPURLResponse, http.statusCode == 200,
-                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let accessToken = json["access_token"] as? String {
-                    completion(.success(accessToken))
-                } else {
-                    completion(.success(code))
-                }
-            } catch {
-                completion(.success(code))
-            }
+        if http.statusCode == 200,
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let accessToken = json["access_token"] as? String {
+            return accessToken
         }
+
+        let responseStr = String(data: data, encoding: .utf8) ?? "HTTP \(http.statusCode)"
+        let msg = "Token exchange failed (HTTP \(http.statusCode)): \(responseStr)"
+        throw NSError(domain: "ClaudeAuth", code: -402, userInfo: [NSLocalizedDescriptionKey: msg])
     }
 
     private func generateCodeVerifier() -> String {
