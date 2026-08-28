@@ -1,12 +1,13 @@
 import AppKit
 import SwiftUI
+import Combine
 
 @MainActor
 final class MenuBarController: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
     private let service = AggregateQuotaService()
-    private var observation: Any?
+    private var observation: AnyCancellable?
     private var outsideClickMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -27,12 +28,17 @@ final class MenuBarController: NSObject, NSApplicationDelegate {
         popover.behavior = .applicationDefined
         self.popover = popover
 
-        observation = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self, let button = self.statusItem.button else { return }
-                self.updateButton(button)
+        // Redraw only when something the button actually renders has changed (quota numbers,
+        // connect/disconnect, tray settings) rather than polling on a fixed timer — the data
+        // itself only changes on `service`'s multi-minute refresh cycle, so a 1s timer here was
+        // just burning CPU redrawing an unchanged title every second, forever.
+        observation = service.objectWillChange
+            .sink { [weak self] _ in
+                DispatchQueue.main.async {
+                    guard let self, let button = self.statusItem.button else { return }
+                    self.updateButton(button)
+                }
             }
-        }
 
         service.startPolling()
     }
