@@ -57,7 +57,7 @@ final class MenuBarController: NSObject, NSApplicationDelegate {
                 title.append(NSAttributedString(string: "  "))
             }
 
-            let pct = provider.minUtilization
+            let pct = provider.worstUtilization
             let color = trayColor(for: pct)
 
             if service.showTrayIcon {

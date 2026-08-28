@@ -16,9 +16,10 @@ public protocol QuotaProvider: AnyObject, ObservableObject {
 
 public extension QuotaProvider {
     /// The single percentage summarizing this provider for compact display (menu bar, etc):
-    /// the smaller of its periods' utilization, e.g. min(5h session, 7d weekly) for Claude.
-    var minUtilization: Double? {
-        periods.compactMap(\.utilization).min()
+    /// the worst (highest) of its periods' utilization, e.g. max(5h session, 7d weekly) for
+    /// Claude — whichever limit you'll hit first.
+    var worstUtilization: Double? {
+        periods.compactMap(\.utilization).max()
     }
 }
 
