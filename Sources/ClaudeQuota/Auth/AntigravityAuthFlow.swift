@@ -2,19 +2,33 @@ import Foundation
 import CryptoKit
 import AppKit
 
-public struct CodexTokenSet {
+public struct AntigravityTokenSet {
     public let accessToken: String
     public let refreshToken: String?
-    public let idToken: String?
+    public let expiresIn: Double?
 }
 
 @MainActor
-public final class CodexAuthFlow: ObservableObject {
-    /// Public OAuth client id used by the official Codex CLI, discovered by inspecting the
-    /// open-source `openai/codex` repo (codex-rs/login). See GeneratedCredentials.swift
-    /// (generated from .env — see doc/features/oauth-credentials.md) for the actual value.
-    public static let clientID = GeneratedCredentials.codexClientID
-    private static let issuer = "https://auth.openai.com"
+public final class AntigravityAuthFlow: ObservableObject {
+    /// Public OAuth client used by Google's Antigravity CLI/IDE, discovered by inspecting the
+    /// official Antigravity binary's network traffic (the same client several open-source
+    /// community auth plugins for opencode/etc. rely on, e.g. opencode-antigravity-auth). Not a
+    /// confidential value — it's baked into every copy of the official Antigravity binary and
+    /// already public across those community repos — but GitHub's push protection still flags
+    /// its shape as a leaked credential, so it lives in .env / GeneratedCredentials.swift
+    /// (gitignored, see doc/features/oauth-credentials.md) instead of a literal here.
+    public static var clientID: String { GeneratedCredentials.antigravityClientID }
+    public static var clientSecret: String { GeneratedCredentials.antigravityClientSecret }
+
+    private static let authorizeURL = "https://accounts.google.com/o/oauth2/v2/auth"
+    private static let tokenURL = "https://oauth2.googleapis.com/token"
+    private static let scopes = [
+        "https://www.googleapis.com/auth/cloud-platform",
+        "https://www.googleapis.com/auth/userinfo.email",
+        "https://www.googleapis.com/auth/userinfo.profile",
+        "https://www.googleapis.com/auth/cclog",
+        "https://www.googleapis.com/auth/experimentsandconfigs"
+    ].joined(separator: " ")
 
     @Published public private(set) var isAuthenticating: Bool = false
     @Published public private(set) var listeningURLString: String?
@@ -26,7 +40,7 @@ public final class CodexAuthFlow: ObservableObject {
 
     public init() {}
 
-    public func startAuthorization(completion: @escaping (Result<CodexTokenSet, Error>) -> Void) {
+    public func startAuthorization(completion: @escaping (Result<AntigravityTokenSet, Error>) -> Void) {
         stopAuthorization()
 
         let verifier = generateCodeVerifier()
@@ -38,29 +52,27 @@ public final class CodexAuthFlow: ObservableObject {
         self.isAuthenticating = true
         self.errorMessage = nil
 
-        // 1455 and 1457 are the only redirect ports registered for this OAuth client — any other
-        // port gets rejected as an invalid redirect_uri, so this mirrors the official Codex CLI's
-        // own primary/fallback ports exactly rather than scanning a wider range.
-        let localServer = LocalOAuthServer(preferredPort: 1455, fallbackPorts: [1457])
+        // Port 51121 is the registered redirect port for this OAuth client (mirrors the
+        // official Antigravity CLI's own local callback server) — no fallback port is possible.
+        let localServer = LocalOAuthServer(preferredPort: 51121, fallbackPorts: [])
         self.server = localServer
 
         localServer.start(timeout: 180, onReady: { [weak self] readyPort in
             guard let self = self else { return }
-            let redirectURI = "http://localhost:\(readyPort)/auth/callback"
+            let redirectURI = "http://localhost:\(readyPort)/oauth-callback"
             self.listeningURLString = redirectURI
 
-            var components = URLComponents(string: "\(Self.issuer)/oauth/authorize")!
+            var components = URLComponents(string: Self.authorizeURL)!
             components.queryItems = [
-                URLQueryItem(name: "response_type", value: "code"),
                 URLQueryItem(name: "client_id", value: Self.clientID),
+                URLQueryItem(name: "response_type", value: "code"),
                 URLQueryItem(name: "redirect_uri", value: redirectURI),
-                URLQueryItem(name: "scope", value: "openid profile email offline_access api.connectors.read api.connectors.invoke"),
+                URLQueryItem(name: "scope", value: Self.scopes),
                 URLQueryItem(name: "code_challenge", value: challenge),
                 URLQueryItem(name: "code_challenge_method", value: "S256"),
-                URLQueryItem(name: "id_token_add_organizations", value: "true"),
-                URLQueryItem(name: "codex_cli_simplified_flow", value: "true"),
-                URLQueryItem(name: "state", value: stateToken),
-                URLQueryItem(name: "originator", value: "codex_cli_rs")
+                URLQueryItem(name: "access_type", value: "offline"),
+                URLQueryItem(name: "prompt", value: "consent"),
+                URLQueryItem(name: "state", value: stateToken)
             ]
 
             if let authURL = components.url {
@@ -75,14 +87,14 @@ public final class CodexAuthFlow: ObservableObject {
                 if let error = queryParams["error"] {
                     let desc = queryParams["error_description"] ?? error
                     self.errorMessage = desc
-                    completion(.failure(NSError(domain: "CodexAuth", code: -1, userInfo: [NSLocalizedDescriptionKey: desc])))
+                    completion(.failure(NSError(domain: "AntigravityAuth", code: -1, userInfo: [NSLocalizedDescriptionKey: desc])))
                     return
                 }
 
                 if let returnedState = queryParams["state"], returnedState != stateToken {
                     let err = "State mismatch — possible CSRF, aborting"
                     self.errorMessage = err
-                    completion(.failure(NSError(domain: "CodexAuth", code: -3, userInfo: [NSLocalizedDescriptionKey: err])))
+                    completion(.failure(NSError(domain: "AntigravityAuth", code: -3, userInfo: [NSLocalizedDescriptionKey: err])))
                     return
                 }
 
@@ -91,7 +103,7 @@ public final class CodexAuthFlow: ObservableObject {
                 } else {
                     let err = "No authorization code found in callback response"
                     self.errorMessage = err
-                    completion(.failure(NSError(domain: "CodexAuth", code: -2, userInfo: [NSLocalizedDescriptionKey: err])))
+                    completion(.failure(NSError(domain: "AntigravityAuth", code: -2, userInfo: [NSLocalizedDescriptionKey: err])))
                 }
 
             case .failure(let error):
@@ -108,8 +120,8 @@ public final class CodexAuthFlow: ObservableObject {
         listeningURLString = nil
     }
 
-    private func exchangeCodeForToken(code: String, verifier: String, completion: @escaping (Result<CodexTokenSet, Error>) -> Void) {
-        let redirectURI = listeningURLString ?? "http://localhost:1455/auth/callback"
+    private func exchangeCodeForToken(code: String, verifier: String, completion: @escaping (Result<AntigravityTokenSet, Error>) -> Void) {
+        let redirectURI = listeningURLString ?? "http://localhost:51121/oauth-callback"
 
         Task {
             do {
@@ -122,77 +134,53 @@ public final class CodexAuthFlow: ObservableObject {
         }
     }
 
-    /// Mirrors the exact request the official Codex CLI sends for the authorization_code grant
-    /// (verified against the open-source codex-rs/login/src/server.rs): form-encoded POST to
-    /// auth.openai.com.
-    static func performCodeExchange(code: String, redirectURI: String, verifier: String) async throws -> CodexTokenSet {
-        let url = URL(string: "\(issuer)/oauth/token")!
+    static func performCodeExchange(code: String, redirectURI: String, verifier: String) async throws -> AntigravityTokenSet {
+        try await performTokenRequest(body: [
+            "client_id": clientID,
+            "client_secret": clientSecret,
+            "code": code,
+            "grant_type": "authorization_code",
+            "redirect_uri": redirectURI,
+            "code_verifier": verifier
+        ])
+    }
 
-        var request = URLRequest(url: url)
+    /// Exchanges a stored refresh token for a new access token. Note Google's refresh grant
+    /// typically omits `refresh_token` in the response (no rotation) — callers should keep the
+    /// existing refresh token when `refreshToken` comes back nil.
+    public static func refreshAccessToken(refreshToken: String) async throws -> AntigravityTokenSet {
+        try await performTokenRequest(body: [
+            "client_id": clientID,
+            "client_secret": clientSecret,
+            "grant_type": "refresh_token",
+            "refresh_token": refreshToken
+        ])
+    }
+
+    private static func performTokenRequest(body: [String: String]) async throws -> AntigravityTokenSet {
+        var request = URLRequest(url: URL(string: tokenURL)!)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-
-        let bodyParams = [
-            "grant_type": "authorization_code",
-            "code": code,
-            "redirect_uri": redirectURI,
-            "client_id": clientID,
-            "code_verifier": verifier
-        ]
-        request.httpBody = formEncode(bodyParams).data(using: .utf8)
+        request.httpBody = formEncode(body).data(using: .utf8)
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
-            throw NSError(domain: "CodexAuth", code: -401, userInfo: [NSLocalizedDescriptionKey: "No HTTP response from token endpoint"])
+            throw NSError(domain: "AntigravityAuth", code: -401, userInfo: [NSLocalizedDescriptionKey: "No HTTP response from token endpoint"])
         }
 
         if http.statusCode == 200,
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let accessToken = json["access_token"] as? String {
-            return CodexTokenSet(
+            return AntigravityTokenSet(
                 accessToken: accessToken,
                 refreshToken: json["refresh_token"] as? String,
-                idToken: json["id_token"] as? String
+                expiresIn: json["expires_in"] as? Double
             )
         }
 
         let responseStr = String(data: data, encoding: .utf8) ?? "HTTP \(http.statusCode)"
         let msg = "Token request failed (HTTP \(http.statusCode)): \(responseStr)"
-        throw NSError(domain: "CodexAuth", code: -402, userInfo: [NSLocalizedDescriptionKey: msg])
-    }
-
-    /// Exchanges a stored refresh token for a new access token, per the same endpoint/shape the
-    /// CLI uses for refreshes (JSON body, unlike the form-encoded authorization_code exchange).
-    public static func refreshAccessToken(refreshToken: String) async throws -> CodexTokenSet {
-        let url = URL(string: "\(issuer)/oauth/token")!
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "client_id": clientID,
-            "grant_type": "refresh_token",
-            "refresh_token": refreshToken
-        ])
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw NSError(domain: "CodexAuth", code: -401, userInfo: [NSLocalizedDescriptionKey: "No HTTP response from token endpoint"])
-        }
-
-        if http.statusCode == 200,
-           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let accessToken = json["access_token"] as? String {
-            return CodexTokenSet(
-                accessToken: accessToken,
-                refreshToken: json["refresh_token"] as? String,
-                idToken: json["id_token"] as? String
-            )
-        }
-
-        let responseStr = String(data: data, encoding: .utf8) ?? "HTTP \(http.statusCode)"
-        let msg = "Token refresh failed (HTTP \(http.statusCode)): \(responseStr)"
-        throw NSError(domain: "CodexAuth", code: -403, userInfo: [NSLocalizedDescriptionKey: msg])
+        throw NSError(domain: "AntigravityAuth", code: -402, userInfo: [NSLocalizedDescriptionKey: msg])
     }
 
     private static func formEncode(_ params: [String: String]) -> String {

@@ -14,11 +14,22 @@ public final class ClaudeProvider: ObservableObject, QuotaProvider {
 
     private let apiURL = URL(string: "https://api.anthropic.com/api/oauth/usage")!
 
-    private let tokenKey = "claude_oauth_token"
-    private let refreshTokenKey = "claude_oauth_refresh_token"
-    private let expiresAtKey = "claude_oauth_expires_at"
+    // All of this provider's credentials live under one Keychain item instead of one item per
+    // field — each distinct item needs its own one-time "Always Allow" authorization from
+    // macOS, so one item per provider means one prompt per provider instead of three.
+    private let stateKey = "claude_oauth_state"
+    private static let legacyTokenKey = "claude_oauth_token"
+    private static let legacyRefreshTokenKey = "claude_oauth_refresh_token"
+    private static let legacyExpiresAtKey = "claude_oauth_expires_at"
+
+    private struct StoredState: Codable {
+        var accessToken: String
+        var refreshToken: String?
+        var expiresAt: Double?
+    }
 
     public init() {
+        migrateLegacyKeysIfNeeded()
         checkInitialStatus()
     }
 
@@ -27,10 +38,39 @@ public final class ClaudeProvider: ObservableObject, QuotaProvider {
     }
 
     public func getToken() -> String? {
-        guard let token = KeychainService.shared.load(key: tokenKey), !token.isEmpty else {
+        let token = loadState()?.accessToken
+        return (token?.isEmpty ?? true) ? nil : token
+    }
+
+    private func loadState() -> StoredState? {
+        guard let raw = KeychainService.shared.load(key: stateKey), let data = raw.data(using: .utf8) else {
             return nil
         }
-        return token
+        return try? JSONDecoder().decode(StoredState.self, from: data)
+    }
+
+    private func saveState(_ state: StoredState) {
+        guard let data = try? JSONEncoder().encode(state), let raw = String(data: data, encoding: .utf8) else {
+            return
+        }
+        _ = KeychainService.shared.save(key: stateKey, value: raw)
+    }
+
+    /// One-time migration from the old one-item-per-field scheme to the consolidated one above.
+    private func migrateLegacyKeysIfNeeded() {
+        guard loadState() == nil,
+              let legacyToken = KeychainService.shared.load(key: Self.legacyTokenKey), !legacyToken.isEmpty else {
+            return
+        }
+        let legacyExpiresAt = KeychainService.shared.load(key: Self.legacyExpiresAtKey).flatMap(Double.init)
+        saveState(StoredState(
+            accessToken: legacyToken,
+            refreshToken: KeychainService.shared.load(key: Self.legacyRefreshTokenKey),
+            expiresAt: legacyExpiresAt
+        ))
+        KeychainService.shared.delete(key: Self.legacyTokenKey)
+        KeychainService.shared.delete(key: Self.legacyRefreshTokenKey)
+        KeychainService.shared.delete(key: Self.legacyExpiresAtKey)
     }
 
     public func startOAuthLogin() {
@@ -48,29 +88,25 @@ public final class ClaudeProvider: ObservableObject, QuotaProvider {
     }
 
     private func saveTokenSet(_ tokenSet: ClaudeTokenSet) {
-        _ = KeychainService.shared.save(key: tokenKey, value: tokenSet.accessToken)
+        var state = loadState() ?? StoredState(accessToken: "", refreshToken: nil, expiresAt: nil)
+        state.accessToken = tokenSet.accessToken
         if let refreshToken = tokenSet.refreshToken {
-            _ = KeychainService.shared.save(key: refreshTokenKey, value: refreshToken)
+            state.refreshToken = refreshToken
         }
-        if let expiresAt = tokenSet.expiresAt {
-            _ = KeychainService.shared.save(key: expiresAtKey, value: String(expiresAt.timeIntervalSince1970))
-        } else {
-            KeychainService.shared.delete(key: expiresAtKey)
-        }
+        state.expiresAt = tokenSet.expiresAt?.timeIntervalSince1970
+        saveState(state)
         status = .connected
     }
 
     private func getExpiresAt() -> Date? {
-        guard let raw = KeychainService.shared.load(key: expiresAtKey), let interval = Double(raw) else {
-            return nil
-        }
+        guard let interval = loadState()?.expiresAt else { return nil }
         return Date(timeIntervalSince1970: interval)
     }
 
     /// Exchanges the stored refresh token for a new access token and persists the result.
     /// Returns false if there's no refresh token or the refresh request itself fails.
     private func attemptTokenRefresh() async -> Bool {
-        guard let refreshToken = KeychainService.shared.load(key: refreshTokenKey), !refreshToken.isEmpty else {
+        guard let refreshToken = loadState()?.refreshToken, !refreshToken.isEmpty else {
             return false
         }
         do {
@@ -84,9 +120,7 @@ public final class ClaudeProvider: ObservableObject, QuotaProvider {
 
     public func logout() {
         authFlow.stopAuthorization()
-        KeychainService.shared.delete(key: tokenKey)
-        KeychainService.shared.delete(key: refreshTokenKey)
-        KeychainService.shared.delete(key: expiresAtKey)
+        KeychainService.shared.delete(key: stateKey)
         periods = []
         status = .disconnected
     }

@@ -10,13 +10,13 @@ public struct SettingsView: View {
     enum AuthTarget: Identifiable {
         case claude
         case openAI
-        case google
+        case antigravity
 
         var id: String {
             switch self {
             case .claude: "claude"
             case .openAI: "openai"
-            case .google: "google"
+            case .antigravity: "antigravity"
             }
         }
 
@@ -24,18 +24,7 @@ public struct SettingsView: View {
             switch self {
             case .claude: "Claude"
             case .openAI: "Codex"
-            case .google: "Gemini"
-            }
-        }
-
-        var initialURL: URL {
-            switch self {
-            case .claude:
-                URL(string: "https://claude.ai/login")!
-            case .openAI:
-                URL(string: "https://chatgpt.com")!
-            case .google:
-                URL(string: "https://accounts.google.com")!
+            case .antigravity: "Antigravity"
             }
         }
     }
@@ -71,10 +60,10 @@ public struct SettingsView: View {
                     )
 
                     providerRow(
-                        title: "Gemini",
-                        subtitle: "Google AI subscription",
-                        provider: service.googleAIProvider,
-                        onConnect: { connectProvider(.google) }
+                        title: "Antigravity",
+                        subtitle: "Google Antigravity subscription",
+                        provider: service.antigravityProvider,
+                        onConnect: { connectProvider(.antigravity) }
                     )
                 }
             }
@@ -94,14 +83,15 @@ public struct SettingsView: View {
                 target: target,
                 claudeProvider: service.claudeProvider,
                 openAIProvider: service.openAIProvider,
+                antigravityProvider: service.antigravityProvider,
                 onDismiss: {
                     switch target {
                     case .claude:
                         service.claudeProvider.authFlow.stopAuthorization()
                     case .openAI:
                         service.openAIProvider.authFlow.stopAuthorization()
-                    case .google:
-                        break
+                    case .antigravity:
+                        service.antigravityProvider.authFlow.stopAuthorization()
                     }
                     activeAuthSheet = nil
                 }
@@ -115,8 +105,8 @@ public struct SettingsView: View {
             service.claudeProvider.startOAuthLogin()
         case .openAI:
             service.openAIProvider.startOAuthLogin()
-        case .google:
-            NSWorkspace.shared.open(target.initialURL)
+        case .antigravity:
+            service.antigravityProvider.startOAuthLogin()
         }
         activeAuthSheet = target
     }
@@ -243,6 +233,7 @@ struct BrowserAuthSheetView: View {
     let target: SettingsView.AuthTarget
     @ObservedObject var claudeProvider: ClaudeProvider
     @ObservedObject var openAIProvider: OpenAIProvider
+    @ObservedObject var antigravityProvider: AntigravityProvider
     let onDismiss: () -> Void
 
     var body: some View {
@@ -263,8 +254,8 @@ struct BrowserAuthSheetView: View {
                 claudeAuthView
             case .openAI:
                 codexAuthView
-            case .google:
-                defaultBrowserAuthView
+            case .antigravity:
+                antigravityAuthView
             }
 
             Spacer()
@@ -278,6 +269,11 @@ struct BrowserAuthSheetView: View {
         }
         .onChange(of: openAIProvider.status) { _, newStatus in
             if target == .openAI && newStatus.isConnected {
+                onDismiss()
+            }
+        }
+        .onChange(of: antigravityProvider.status) { _, newStatus in
+            if target == .antigravity && newStatus.isConnected {
                 onDismiss()
             }
         }
@@ -296,6 +292,14 @@ struct BrowserAuthSheetView: View {
             listeningURLString: openAIProvider.authFlow.listeningURLString,
             errorMessage: openAIProvider.authFlow.errorMessage,
             reopen: { openAIProvider.startOAuthLogin() }
+        )
+    }
+
+    private var antigravityAuthView: some View {
+        localCallbackAuthView(
+            listeningURLString: antigravityProvider.authFlow.listeningURLString,
+            errorMessage: antigravityProvider.authFlow.errorMessage,
+            reopen: { antigravityProvider.startOAuthLogin() }
         )
     }
 
@@ -335,33 +339,6 @@ struct BrowserAuthSheetView: View {
 
             Button(action: reopen) {
                 Label("Re-open Authorization Page", systemImage: "arrow.up.right.square")
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-        }
-        .padding(12)
-        .background(Color.secondary.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-    }
-
-    private var defaultBrowserAuthView: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: "safari")
-                    .font(.title2)
-                    .foregroundStyle(Color.accentColor)
-                Text("Opened login page in your default browser.")
-                    .font(.subheadline.weight(.semibold))
-            }
-
-            Text("Automatic sign-in for this provider isn't available yet — support is coming soon.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Button(action: {
-                NSWorkspace.shared.open(target.initialURL)
-            }) {
-                Label("Re-open in Browser", systemImage: "arrow.up.right.square")
             }
             .buttonStyle(.bordered)
             .controlSize(.small)

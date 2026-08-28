@@ -14,11 +14,22 @@ public final class OpenAIProvider: ObservableObject, QuotaProvider {
 
     private let usageURL = URL(string: "https://chatgpt.com/backend-api/wham/usage")!
 
-    private let tokenKey = "openai_oauth_token"
-    private let refreshTokenKey = "openai_oauth_refresh_token"
-    private let accountIDKey = "openai_oauth_account_id"
+    // All of this provider's credentials live under one Keychain item instead of one item per
+    // field — each distinct item needs its own one-time "Always Allow" authorization from
+    // macOS, so one item per provider means one prompt per provider instead of three.
+    private let stateKey = "openai_oauth_state"
+    private static let legacyTokenKey = "openai_oauth_token"
+    private static let legacyRefreshTokenKey = "openai_oauth_refresh_token"
+    private static let legacyAccountIDKey = "openai_oauth_account_id"
+
+    private struct StoredState: Codable {
+        var accessToken: String
+        var refreshToken: String?
+        var accountID: String?
+    }
 
     public init() {
+        migrateLegacyKeysIfNeeded()
         checkInitialStatus()
     }
 
@@ -27,14 +38,42 @@ public final class OpenAIProvider: ObservableObject, QuotaProvider {
     }
 
     public func getToken() -> String? {
-        guard let token = KeychainService.shared.load(key: tokenKey), !token.isEmpty else {
-            return nil
-        }
-        return token
+        let token = loadState()?.accessToken
+        return (token?.isEmpty ?? true) ? nil : token
     }
 
     private func getAccountID() -> String? {
-        KeychainService.shared.load(key: accountIDKey)
+        loadState()?.accountID
+    }
+
+    private func loadState() -> StoredState? {
+        guard let raw = KeychainService.shared.load(key: stateKey), let data = raw.data(using: .utf8) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(StoredState.self, from: data)
+    }
+
+    private func saveState(_ state: StoredState) {
+        guard let data = try? JSONEncoder().encode(state), let raw = String(data: data, encoding: .utf8) else {
+            return
+        }
+        _ = KeychainService.shared.save(key: stateKey, value: raw)
+    }
+
+    /// One-time migration from the old one-item-per-field scheme to the consolidated one above.
+    private func migrateLegacyKeysIfNeeded() {
+        guard loadState() == nil,
+              let legacyToken = KeychainService.shared.load(key: Self.legacyTokenKey), !legacyToken.isEmpty else {
+            return
+        }
+        saveState(StoredState(
+            accessToken: legacyToken,
+            refreshToken: KeychainService.shared.load(key: Self.legacyRefreshTokenKey),
+            accountID: KeychainService.shared.load(key: Self.legacyAccountIDKey)
+        ))
+        KeychainService.shared.delete(key: Self.legacyTokenKey)
+        KeychainService.shared.delete(key: Self.legacyRefreshTokenKey)
+        KeychainService.shared.delete(key: Self.legacyAccountIDKey)
     }
 
     public func startOAuthLogin() {
@@ -52,20 +91,22 @@ public final class OpenAIProvider: ObservableObject, QuotaProvider {
     }
 
     private func saveTokenSet(_ tokenSet: CodexTokenSet) {
-        _ = KeychainService.shared.save(key: tokenKey, value: tokenSet.accessToken)
+        var state = loadState() ?? StoredState(accessToken: "", refreshToken: nil, accountID: nil)
+        state.accessToken = tokenSet.accessToken
         if let refreshToken = tokenSet.refreshToken {
-            _ = KeychainService.shared.save(key: refreshTokenKey, value: refreshToken)
+            state.refreshToken = refreshToken
         }
         if let idToken = tokenSet.idToken, let accountID = Self.accountID(fromIDToken: idToken) {
-            _ = KeychainService.shared.save(key: accountIDKey, value: accountID)
+            state.accountID = accountID
         }
+        saveState(state)
         status = .connected
     }
 
     /// Exchanges the stored refresh token for a new access token and persists the result.
     /// Returns false if there's no refresh token or the refresh request itself fails.
     private func attemptTokenRefresh() async -> Bool {
-        guard let refreshToken = KeychainService.shared.load(key: refreshTokenKey), !refreshToken.isEmpty else {
+        guard let refreshToken = loadState()?.refreshToken, !refreshToken.isEmpty else {
             return false
         }
         do {
@@ -79,9 +120,7 @@ public final class OpenAIProvider: ObservableObject, QuotaProvider {
 
     public func logout() {
         authFlow.stopAuthorization()
-        KeychainService.shared.delete(key: tokenKey)
-        KeychainService.shared.delete(key: refreshTokenKey)
-        KeychainService.shared.delete(key: accountIDKey)
+        KeychainService.shared.delete(key: stateKey)
         periods = []
         status = .disconnected
     }

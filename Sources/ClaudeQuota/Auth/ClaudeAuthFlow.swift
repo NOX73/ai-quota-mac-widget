@@ -10,7 +10,7 @@ public struct ClaudeTokenSet {
 
 @MainActor
 public final class ClaudeAuthFlow: ObservableObject {
-    public static let clientID = "xxxxxxx"
+    public static let clientID = GeneratedCredentials.claudeClientID
 
     @Published public private(set) var isAuthenticating: Bool = false
     @Published public private(set) var listeningURLString: String?

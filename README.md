@@ -1,10 +1,10 @@
 # ClaudeQuota (AIQuota Widget)
 
-macOS menu bar application for monitoring AI subscription usage quotas across multiple providers: **Claude**, **Codex** (OpenAI), and **Gemini** (Google AI Plus).
+macOS menu bar application for monitoring AI subscription usage quotas across multiple providers: **Claude**, **Codex** (OpenAI), and **Antigravity** (Google).
 
 <p align="center">
   <img src="doc/screenshots/popover.png" alt="Popover showing Claude and Codex session/weekly usage" width="380">
-  <img src="doc/screenshots/settings.png" alt="Settings window with Claude, Codex, and Gemini provider connections" width="380">
+  <img src="doc/screenshots/settings.png" alt="Settings window with Claude, Codex, and Antigravity provider connections" width="380">
 </p>
 
 ## Features
@@ -13,8 +13,7 @@ macOS menu bar application for monitoring AI subscription usage quotas across mu
 - **Multi-Provider Monitoring**:
   - **Claude**: 5-hour session quota and 7-day weekly usage limit tracking via Anthropic OAuth API — connects automatically via a localhost OAuth redirect, no copy-pasting.
   - **Codex (OpenAI)**: 5-hour session and weekly rate-limit windows, via the same OAuth flow and usage API the official Codex CLI uses — connects automatically via a localhost OAuth redirect, no copy-pasting.
-  - **Gemini (Google AI Plus)**: Entitlement limits across Gemini, Claude, and GPT models.
-  - Gemini currently has no automatic connect flow of its own (manual token paste was removed) — see [`doc/features/ui-customization.md`](doc/features/ui-customization.md).
+  - **Antigravity (Google)**: Remaining quota across Claude, Gemini 3 Pro, and Gemini 3 Flash models on the Antigravity Cloud Code backend — connects automatically via a localhost OAuth redirect, no copy-pasting. Gemini CLI support was dropped since Google is deprecating it in favor of Antigravity (`@google/gemini-cli` stops serving API requests June 18, 2026).
 - **Default System Browser Auth**: Launch login directly in your default browser (Safari, Chrome, Arc), enabling full support for Google Sign-In, Passkeys, 2FA, and SAML SSO.
 - **Secure Storage**: Credentials stored in macOS System Keychain via standard Security framework APIs (`com.claude.quota.widget`).
 
@@ -35,6 +34,7 @@ macOS menu bar application for monitoring AI subscription usage quotas across mu
 - **[Localhost OAuth Redirect Flow](doc/features/oauth-localhost-flow.md)**: Automatic CLI-style loopback OAuth authorization using a local HTTP server on `localhost:54321`.
 - **[Popover/Settings Reactivity Fixes](doc/features/popover-reactivity-fixes.md)**: Why connect/disconnect, the OAuth browser round-trip, and Claude's usage periods could get stuck showing stale state, and how each was fixed.
 - **[UI Customization](doc/features/ui-customization.md)**: Manual token paste removal, simplified provider names, real logomark icons, configurable usage-color thresholds, and the menu bar's icon/color/neutral settings.
+- **[Antigravity Connect Flow](doc/features/antigravity-connect-flow.md)**: Replaced the non-functional Gemini stub with a real localhost OAuth flow and quota fetch against Google's Antigravity/Cloud Code Assist backend.
 
 ---
 

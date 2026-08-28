@@ -3,3 +3,8 @@
 build/
 *.xcodeproj
 .swiftpm/
+
+# OAuth client credentials (see .env.example and doc/features/oauth-credentials.md) and the
+# Swift file generated from them — never commit either.
+.env
+Sources/ClaudeQuota/Auth/GeneratedCredentials.swift

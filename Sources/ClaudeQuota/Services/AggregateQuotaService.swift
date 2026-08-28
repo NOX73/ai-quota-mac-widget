@@ -22,7 +22,7 @@ public final class AggregateQuotaService: ObservableObject {
 
     public let claudeProvider = ClaudeProvider()
     public let openAIProvider = OpenAIProvider()
-    public let googleAIProvider = GoogleAIProvider()
+    public let antigravityProvider = AntigravityProvider()
 
     private var timer: Timer?
     private var providerSubscriptions: [AnyCancellable] = []
@@ -45,7 +45,7 @@ public final class AggregateQuotaService: ObservableObject {
         self.trayColorEnabled = (defaults.object(forKey: DefaultsKey.trayColorEnabled) as? Bool) ?? true
         self.neutralWhenNormal = (defaults.object(forKey: DefaultsKey.neutralWhenNormal) as? Bool) ?? false
 
-        self.providers = [claudeProvider, openAIProvider, googleAIProvider]
+        self.providers = [claudeProvider, openAIProvider, antigravityProvider]
 
         // Forward each provider's own @Published changes (status, periods, ...) so that
         // views observing only `AggregateQuotaService` re-render on connect/disconnect,
@@ -56,7 +56,7 @@ public final class AggregateQuotaService: ObservableObject {
         openAIProvider.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &providerSubscriptions)
-        googleAIProvider.objectWillChange
+        antigravityProvider.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &providerSubscriptions)
     }
@@ -124,7 +124,7 @@ public final class AggregateQuotaService: ObservableObject {
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await self.claudeProvider.refresh() }
             group.addTask { await self.openAIProvider.refresh() }
-            group.addTask { await self.googleAIProvider.refresh() }
+            group.addTask { await self.antigravityProvider.refresh() }
         }
 
         self.lastUpdated = Date()

@@ -1,6 +1,6 @@
 # AIQuota Widget Documentation
 
-Виджет macOS для отображения лимитов подписок трех AI-провайдеров: Claude, OpenAI ChatGPT и Google AI Plus.
+Виджет macOS для отображения лимитов подписок трех AI-провайдеров: Claude, OpenAI ChatGPT и Google Antigravity.
 
 > **Внимание по ведению документации**: Вся документация по архитектуре, планам и реализациям фичей проекта находится и ведется строго в директории `doc/` (в частности в `doc/features/`).
 
@@ -11,6 +11,7 @@
 - **[oauth-localhost-flow.md](features/oauth-localhost-flow.md)**: Архитектура автоматической CLI-style OAuth авторизации с помощью локального HTTP-сервера на `localhost:54321`.
 - **[popover-reactivity-fixes.md](features/popover-reactivity-fixes.md)**: Почему попап/настройки могли зависать на устаревшем состоянии после connect/disconnect и OAuth-флоу через браузер, и как это исправлено.
 - **[ui-customization.md](features/ui-customization.md)**: Удаление ручного ввода токена, упрощённые названия провайдеров, настоящие иконки-логотипы, настраиваемые пороги цветов и настройки трея (иконка/цвет/нейтральный режим).
+- **[antigravity-connect-flow.md](features/antigravity-connect-flow.md)**: Замена нерабочей заглушки Gemini на настоящий localhost OAuth-флоу и опрос квот через бэкенд Google Antigravity/Cloud Code Assist.
 
 ## Сборка и запуск
 

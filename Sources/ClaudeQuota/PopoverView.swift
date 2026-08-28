@@ -50,7 +50,7 @@ public struct PopoverView: View {
                                 .foregroundStyle(.tertiary)
                             Text("No subscriptions connected")
                                 .font(.subheadline.weight(.medium))
-                            Text("Click ⚙ settings to connect Claude, Codex, or Gemini.")
+                            Text("Click ⚙ settings to connect Claude, Codex, or Antigravity.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
