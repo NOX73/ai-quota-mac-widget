@@ -14,3 +14,11 @@ public protocol QuotaProvider: AnyObject, ObservableObject {
     func logout()
 }
 
+public extension QuotaProvider {
+    /// The single percentage summarizing this provider for compact display (menu bar, etc):
+    /// the smaller of its periods' utilization, e.g. min(5h session, 7d weekly) for Claude.
+    var minUtilization: Double? {
+        periods.compactMap(\.utilization).min()
+    }
+}
+

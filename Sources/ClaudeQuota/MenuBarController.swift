@@ -37,27 +37,71 @@ final class MenuBarController: NSObject, NSApplicationDelegate {
         service.startPolling()
     }
 
-    private func updateButton(_ button: NSStatusBarButton) {
-        let titleText = service.menuBarTitle
-        let maxPct = service.maxUtilization
+    private static let trayFont = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium)
+    private static let trayIconSize = NSSize(width: 13, height: 13)
 
-        let color: NSColor
-        if maxPct == 0 {
-            color = .secondaryLabelColor
-        } else {
-            let level = UtilizationLevel(utilization: maxPct, warningThreshold: service.warningThreshold, criticalThreshold: service.criticalThreshold)
-            switch level {
-            case .normal: color = .systemGreen
-            case .warning: color = .systemOrange
-            case .critical: color = .systemRed
-            }
+    private func updateButton(_ button: NSStatusBarButton) {
+        let connected = service.providers.filter { $0.status.isConnected }
+
+        guard !connected.isEmpty else {
+            button.attributedTitle = NSAttributedString(string: "AI Quota", attributes: [
+                .foregroundColor: NSColor.secondaryLabelColor,
+                .font: Self.trayFont
+            ])
+            return
         }
 
-        let attrs: [NSAttributedString.Key: Any] = [
-            .foregroundColor: color,
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium)
-        ]
-        button.attributedTitle = NSAttributedString(string: titleText, attributes: attrs)
+        let title = NSMutableAttributedString()
+        for (index, provider) in connected.enumerated() {
+            if index > 0 {
+                title.append(NSAttributedString(string: "  "))
+            }
+
+            let pct = provider.minUtilization
+            let color = trayColor(for: pct)
+
+            if service.showTrayIcon {
+                let icon = tintedTrayIcon(forProviderID: provider.id, color: color)
+                let attachment = NSTextAttachment()
+                attachment.image = icon
+                attachment.bounds = CGRect(x: 0, y: -3, width: Self.trayIconSize.width, height: Self.trayIconSize.height)
+                title.append(NSAttributedString(attachment: attachment))
+                title.append(NSAttributedString(string: " "))
+            }
+
+            let text = pct.map { "\(Int($0))%" } ?? "–%"
+            title.append(NSAttributedString(string: text, attributes: [
+                .foregroundColor: color,
+                .font: Self.trayFont
+            ]))
+        }
+
+        button.attributedTitle = title
+    }
+
+    private func trayColor(for utilization: Double?) -> NSColor {
+        guard service.trayColorEnabled else { return .labelColor }
+        guard let utilization else { return .secondaryLabelColor }
+        switch UtilizationLevel(utilization: utilization, warningThreshold: service.warningThreshold, criticalThreshold: service.criticalThreshold) {
+        case .normal: return .systemGreen
+        case .warning: return .systemOrange
+        case .critical: return .systemRed
+        }
+    }
+
+    /// Renders a provider's template logomark tinted to a solid color, for inline use in the
+    /// menu bar's attributed title (NSTextAttachment doesn't auto-tint template images the way
+    /// SF Symbol attachments do).
+    private func tintedTrayIcon(forProviderID id: String, color: NSColor) -> NSImage {
+        let source = ProviderIcons.icon(forProviderID: id)
+        let result = NSImage(size: Self.trayIconSize)
+        result.lockFocus()
+        color.set()
+        let rect = NSRect(origin: .zero, size: Self.trayIconSize)
+        source.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1.0)
+        rect.fill(using: .sourceAtop)
+        result.unlockFocus()
+        return result
     }
 
     @objc private func togglePopover() {

@@ -1,6 +1,5 @@
 import Foundation
 import Combine
-import SwiftUI
 
 @MainActor
 public final class AggregateQuotaService: ObservableObject {
@@ -13,6 +12,10 @@ public final class AggregateQuotaService: ObservableObject {
     @Published public private(set) var warningThreshold: Double
     /// Utilization % at/above which a period's color switches from yellow to red.
     @Published public private(set) var criticalThreshold: Double
+    /// Whether the menu bar shows each connected provider's logomark next to its percentage.
+    @Published public private(set) var showTrayIcon: Bool
+    /// Whether the menu bar percentage is colored by utilization, or plain menu bar text color.
+    @Published public private(set) var trayColorEnabled: Bool
 
     public let claudeProvider = ClaudeProvider()
     public let openAIProvider = OpenAIProvider()
@@ -26,12 +29,16 @@ public final class AggregateQuotaService: ObservableObject {
     private enum DefaultsKey {
         static let warningThreshold = "quota.warningThreshold"
         static let criticalThreshold = "quota.criticalThreshold"
+        static let showTrayIcon = "quota.showTrayIcon"
+        static let trayColorEnabled = "quota.trayColorEnabled"
     }
 
     public init() {
         let defaults = UserDefaults.standard
         self.warningThreshold = (defaults.object(forKey: DefaultsKey.warningThreshold) as? Double) ?? 50
         self.criticalThreshold = (defaults.object(forKey: DefaultsKey.criticalThreshold) as? Double) ?? 80
+        self.showTrayIcon = (defaults.object(forKey: DefaultsKey.showTrayIcon) as? Bool) ?? true
+        self.trayColorEnabled = (defaults.object(forKey: DefaultsKey.trayColorEnabled) as? Bool) ?? true
 
         self.providers = [claudeProvider, openAIProvider, googleAIProvider]
 
@@ -71,6 +78,16 @@ public final class AggregateQuotaService: ObservableObject {
         UserDefaults.standard.set(criticalThreshold, forKey: DefaultsKey.criticalThreshold)
     }
 
+    public func setShowTrayIcon(_ value: Bool) {
+        showTrayIcon = value
+        UserDefaults.standard.set(value, forKey: DefaultsKey.showTrayIcon)
+    }
+
+    public func setTrayColorEnabled(_ value: Bool) {
+        trayColorEnabled = value
+        UserDefaults.standard.set(value, forKey: DefaultsKey.trayColorEnabled)
+    }
+
     public func manualRefresh() {
         currentInterval = Self.minInterval
         Task {
@@ -101,40 +118,6 @@ public final class AggregateQuotaService: ObservableObject {
         }
 
         self.lastUpdated = Date()
-    }
-
-    // Formatting for MenuBar title
-    public var menuBarTitle: String {
-        var parts: [String] = []
-
-        if claudeProvider.status.isConnected, let maxClaude = claudeProvider.periods.compactMap(\.utilization).max() {
-            parts.append("◆ \(Int(maxClaude))%")
-        } else if claudeProvider.status.isConnected {
-            parts.append("◆ –%")
-        }
-
-        if openAIProvider.status.isConnected, let maxOpenAI = openAIProvider.periods.compactMap(\.utilization).max() {
-            parts.append("⬡ \(Int(maxOpenAI))%")
-        } else if openAIProvider.status.isConnected {
-            parts.append("⬡ –%")
-        }
-
-        if googleAIProvider.status.isConnected, let maxGoogle = googleAIProvider.periods.compactMap(\.utilization).max() {
-            parts.append("✦ \(Int(maxGoogle))%")
-        } else if googleAIProvider.status.isConnected {
-            parts.append("✦ –%")
-        }
-
-        if parts.isEmpty {
-            return "◆ AI Quota"
-        }
-
-        return parts.joined(separator: "  ")
-    }
-
-    public var maxUtilization: Double {
-        let allUtils = providers.flatMap { $0.periods }.compactMap { $0.utilization }
-        return allUtils.max() ?? 0
     }
 }
 

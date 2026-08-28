@@ -82,9 +82,13 @@ public struct SettingsView: View {
             Divider()
 
             thresholdSettings
+
+            Divider()
+
+            menuBarSettings
         }
         .padding(20)
-        .frame(width: 440, height: 500)
+        .frame(width: 440, height: 580)
         .sheet(item: $activeAuthSheet) { target in
             BrowserAuthSheetView(
                 target: target,
@@ -198,6 +202,24 @@ public struct SettingsView: View {
                 )
                 .tint(.red)
             }
+        }
+    }
+
+    private var menuBarSettings: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Menu Bar")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            Toggle("Show provider icon", isOn: Binding(
+                get: { service.showTrayIcon },
+                set: { service.setShowTrayIcon($0) }
+            ))
+
+            Toggle("Colored percentage", isOn: Binding(
+                get: { service.trayColorEnabled },
+                set: { service.setTrayColorEnabled($0) }
+            ))
         }
     }
 }
