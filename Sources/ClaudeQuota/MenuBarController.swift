@@ -83,7 +83,7 @@ final class MenuBarController: NSObject, NSApplicationDelegate {
         guard service.trayColorEnabled else { return .labelColor }
         guard let utilization else { return .secondaryLabelColor }
         switch UtilizationLevel(utilization: utilization, warningThreshold: service.warningThreshold, criticalThreshold: service.criticalThreshold) {
-        case .normal: return .systemGreen
+        case .normal: return service.neutralWhenNormal ? .labelColor : .systemGreen
         case .warning: return .systemOrange
         case .critical: return .systemRed
         }

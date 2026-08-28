@@ -220,6 +220,12 @@ public struct SettingsView: View {
                 get: { service.trayColorEnabled },
                 set: { service.setTrayColorEnabled($0) }
             ))
+
+            Toggle("Neutral color when OK", isOn: Binding(
+                get: { service.neutralWhenNormal },
+                set: { service.setNeutralWhenNormal($0) }
+            ))
+            .disabled(!service.trayColorEnabled)
         }
     }
 }

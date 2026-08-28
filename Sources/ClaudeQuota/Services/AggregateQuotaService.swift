@@ -16,6 +16,9 @@ public final class AggregateQuotaService: ObservableObject {
     @Published public private(set) var showTrayIcon: Bool
     /// Whether the menu bar percentage is colored by utilization, or plain menu bar text color.
     @Published public private(set) var trayColorEnabled: Bool
+    /// When true, utilization below the warning threshold is shown in neutral color instead of
+    /// green — color only shows up once something actually needs attention.
+    @Published public private(set) var neutralWhenNormal: Bool
 
     public let claudeProvider = ClaudeProvider()
     public let openAIProvider = OpenAIProvider()
@@ -31,6 +34,7 @@ public final class AggregateQuotaService: ObservableObject {
         static let criticalThreshold = "quota.criticalThreshold"
         static let showTrayIcon = "quota.showTrayIcon"
         static let trayColorEnabled = "quota.trayColorEnabled"
+        static let neutralWhenNormal = "quota.neutralWhenNormal"
     }
 
     public init() {
@@ -39,6 +43,7 @@ public final class AggregateQuotaService: ObservableObject {
         self.criticalThreshold = (defaults.object(forKey: DefaultsKey.criticalThreshold) as? Double) ?? 80
         self.showTrayIcon = (defaults.object(forKey: DefaultsKey.showTrayIcon) as? Bool) ?? true
         self.trayColorEnabled = (defaults.object(forKey: DefaultsKey.trayColorEnabled) as? Bool) ?? true
+        self.neutralWhenNormal = (defaults.object(forKey: DefaultsKey.neutralWhenNormal) as? Bool) ?? false
 
         self.providers = [claudeProvider, openAIProvider, googleAIProvider]
 
@@ -86,6 +91,11 @@ public final class AggregateQuotaService: ObservableObject {
     public func setTrayColorEnabled(_ value: Bool) {
         trayColorEnabled = value
         UserDefaults.standard.set(value, forKey: DefaultsKey.trayColorEnabled)
+    }
+
+    public func setNeutralWhenNormal(_ value: Bool) {
+        neutralWhenNormal = value
+        UserDefaults.standard.set(value, forKey: DefaultsKey.neutralWhenNormal)
     }
 
     public func manualRefresh() {
