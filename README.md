@@ -43,6 +43,7 @@ macOS menu bar application for monitoring AI subscription usage quotas across mu
 ### Prerequisites
 - macOS 14.0 or later
 - Swift 5.9+ / Xcode Command Line Tools
+- OAuth client credentials in `.env` — copy `.env.example` to `.env` and fill it in (`./scripts/fetch_secrets.sh` automates most of it). See [`doc/features/oauth-credentials.md`](doc/features/oauth-credentials.md).
 
 ### Build via Swift Package Manager
 ```bash
@@ -50,7 +51,7 @@ swift build
 ```
 
 ### Build `.app` Bundle
-To build a standalone executable application bundle in `build/ClaudeQuota.app`:
+To build a standalone executable application bundle in `build/ClaudeQuota.app` (this also generates the credentials file from `.env` automatically):
 ```bash
 ./scripts/build_app.sh
 ```
@@ -59,3 +60,14 @@ To build a standalone executable application bundle in `build/ClaudeQuota.app`:
 ```bash
 open build/ClaudeQuota.app
 ```
+
+### Install to /Applications
+```bash
+cp -r build/ClaudeQuota.app /Applications/
+```
+
+### Launch at Login
+1. `System Settings` → `General` → `Login Items & Extensions`.
+2. Under "Open at Login", click `+` and add `ClaudeQuota.app` from `/Applications`.
+
+Since the app is ad-hoc signed with a fixed identifier (see `build_app.sh`), re-running `build_app.sh` and copying the new build over `/Applications/ClaudeQuota.app` keeps this Login Items entry and any Keychain "Always Allow" grants intact — no need to re-add it after every rebuild.
