@@ -44,12 +44,13 @@ final class MenuBarController: NSObject, NSApplicationDelegate {
         let color: NSColor
         if maxPct == 0 {
             color = .secondaryLabelColor
-        } else if maxPct < 50 {
-            color = .systemGreen
-        } else if maxPct < 80 {
-            color = .systemOrange
         } else {
-            color = .systemRed
+            let level = UtilizationLevel(utilization: maxPct, warningThreshold: service.warningThreshold, criticalThreshold: service.criticalThreshold)
+            switch level {
+            case .normal: color = .systemGreen
+            case .warning: color = .systemOrange
+            case .critical: color = .systemRed
+            }
         }
 
         let attrs: [NSAttributedString.Key: Any] = [

@@ -4,8 +4,7 @@ import Combine
 @MainActor
 public final class OpenAIProvider: ObservableObject, QuotaProvider {
     public let id = "openai"
-    public let displayName = "OpenAI (ChatGPT)"
-    public let iconName = "cpu"
+    public let displayName = "Codex"
 
     @Published public private(set) var status: ProviderStatus = .disconnected
     @Published public private(set) var periods: [QuotaPeriod] = []

@@ -4,8 +4,7 @@ import Combine
 @MainActor
 public final class ClaudeProvider: ObservableObject, QuotaProvider {
     public let id = "claude"
-    public let displayName = "Claude (Anthropic)"
-    public let iconName = "sparkles"
+    public let displayName = "Claude"
 
     @Published public private(set) var status: ProviderStatus = .disconnected
     @Published public private(set) var periods: [QuotaPeriod] = []

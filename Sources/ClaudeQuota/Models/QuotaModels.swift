@@ -16,6 +16,22 @@ public struct QuotaPeriod: Identifiable, Sendable {
     }
 }
 
+public enum UtilizationLevel: Sendable {
+    case normal
+    case warning
+    case critical
+
+    public init(utilization: Double, warningThreshold: Double, criticalThreshold: Double) {
+        if utilization >= criticalThreshold {
+            self = .critical
+        } else if utilization >= warningThreshold {
+            self = .warning
+        } else {
+            self = .normal
+        }
+    }
+}
+
 public enum ProviderStatus: Equatable, Sendable {
     case disconnected
     case connecting

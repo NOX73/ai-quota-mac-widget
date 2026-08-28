@@ -50,7 +50,7 @@ public struct PopoverView: View {
                                 .foregroundStyle(.tertiary)
                             Text("No subscriptions connected")
                                 .font(.subheadline.weight(.medium))
-                            Text("Click ⚙ settings to connect Claude, ChatGPT, or Google AI Plus.")
+                            Text("Click ⚙ settings to connect Claude, Codex, or Gemini.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
@@ -64,7 +64,11 @@ public struct PopoverView: View {
                         .padding(.vertical, 20)
                     } else {
                         ForEach(connectedProviders, id: \.id) { provider in
-                            ProviderCardView(provider: provider)
+                            ProviderCardView(
+                                provider: provider,
+                                warningThreshold: service.warningThreshold,
+                                criticalThreshold: service.criticalThreshold
+                            )
                         }
                     }
                 }
@@ -100,11 +104,17 @@ public struct PopoverView: View {
 
 struct ProviderCardView: View {
     let provider: any QuotaProvider
+    let warningThreshold: Double
+    let criticalThreshold: Double
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Image(systemName: provider.iconName)
+                Image(nsImage: ProviderIcons.icon(forProviderID: provider.id))
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 15, height: 15)
                     .foregroundStyle(.primary)
                 Text(provider.displayName)
                     .font(.subheadline.weight(.semibold))
@@ -128,7 +138,7 @@ struct ProviderCardView: View {
             } else {
                 VStack(spacing: 8) {
                     ForEach(provider.periods) { period in
-                        UsageRowView(period: period)
+                        UsageRowView(period: period, warningThreshold: warningThreshold, criticalThreshold: criticalThreshold)
                     }
                 }
             }
@@ -141,6 +151,8 @@ struct ProviderCardView: View {
 
 struct UsageRowView: View {
     let period: QuotaPeriod
+    let warningThreshold: Double
+    let criticalThreshold: Double
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -175,8 +187,10 @@ struct UsageRowView: View {
     }
 
     private func colorForUtilization(_ value: Double) -> Color {
-        if value < 50 { return .green }
-        if value < 80 { return .orange }
-        return .red
+        switch UtilizationLevel(utilization: value, warningThreshold: warningThreshold, criticalThreshold: criticalThreshold) {
+        case .normal: return .green
+        case .warning: return .orange
+        case .critical: return .red
+        }
     }
 }

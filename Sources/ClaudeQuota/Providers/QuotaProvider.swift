@@ -5,7 +5,6 @@ import Combine
 public protocol QuotaProvider: AnyObject, ObservableObject {
     var id: String { get }
     var displayName: String { get }
-    var iconName: String { get }
     var status: ProviderStatus { get }
     var periods: [QuotaPeriod] { get }
     var isLoading: Bool { get }

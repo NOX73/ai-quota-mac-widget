@@ -4,8 +4,7 @@ import Combine
 @MainActor
 public final class GoogleAIProvider: ObservableObject, QuotaProvider {
     public let id = "google"
-    public let displayName = "Google AI Plus"
-    public let iconName = "wand.and.stars"
+    public let displayName = "Gemini"
 
     @Published public private(set) var status: ProviderStatus = .disconnected
     @Published public private(set) var periods: [QuotaPeriod] = []

@@ -22,9 +22,9 @@ public struct SettingsView: View {
 
         var title: String {
             switch self {
-            case .claude: "Claude (Anthropic)"
-            case .openAI: "OpenAI (ChatGPT)"
-            case .google: "Google AI Plus"
+            case .claude: "Claude"
+            case .openAI: "Codex"
+            case .google: "Gemini"
             }
         }
 
@@ -56,37 +56,35 @@ public struct SettingsView: View {
 
             ScrollView {
                 VStack(spacing: 16) {
-                    // Claude Row
                     providerRow(
-                        icon: "sparkles",
-                        title: "Claude Pro / Max",
-                        subtitle: "Anthropic direct subscription",
+                        title: "Claude",
+                        subtitle: "Anthropic subscription",
                         provider: service.claudeProvider,
                         onConnect: { connectProvider(.claude) }
                     )
 
-                    // OpenAI Row
                     providerRow(
-                        icon: "cpu",
-                        title: "ChatGPT Plus / Pro",
-                        subtitle: "OpenAI ChatGPT subscription",
+                        title: "Codex",
+                        subtitle: "OpenAI subscription",
                         provider: service.openAIProvider,
                         onConnect: { connectProvider(.openAI) }
                     )
 
-                    // Google AI Row
                     providerRow(
-                        icon: "wand.and.stars",
-                        title: "Google AI Plus",
-                        subtitle: "Antigravity multi-model plan",
+                        title: "Gemini",
+                        subtitle: "Google AI subscription",
                         provider: service.googleAIProvider,
                         onConnect: { connectProvider(.google) }
                     )
                 }
             }
+
+            Divider()
+
+            thresholdSettings
         }
         .padding(20)
-        .frame(width: 440, height: 380)
+        .frame(width: 440, height: 500)
         .sheet(item: $activeAuthSheet) { target in
             BrowserAuthSheetView(
                 target: target,
@@ -112,15 +110,17 @@ public struct SettingsView: View {
 
     @ViewBuilder
     private func providerRow<P: QuotaProvider>(
-        icon: String,
         title: String,
         subtitle: String,
         provider: P,
         onConnect: @escaping () -> Void
     ) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.title2)
+            Image(nsImage: ProviderIcons.icon(forProviderID: provider.id))
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 18, height: 18)
                 .frame(width: 32, height: 32)
                 .background(Color.secondary.opacity(0.15))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -136,20 +136,12 @@ public struct SettingsView: View {
             Spacer()
 
             if provider.status.isConnected {
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                    Text("Connected")
-                        .font(.caption.weight(.semibold))
-
-                    Button("Disconnect") {
-                        provider.logout()
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .tint(.red)
-                    .padding(.leading, 6)
+                Button("Disconnect") {
+                    provider.logout()
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .tint(.red)
             } else {
                 Button("Connect") {
                     onConnect()
@@ -161,6 +153,52 @@ public struct SettingsView: View {
         .padding(12)
         .background(Color.secondary.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var thresholdSettings: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Usage Colors")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Yellow from")
+                    Spacer()
+                    Text("\(Int(service.warningThreshold))%")
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                Slider(
+                    value: Binding(
+                        get: { service.warningThreshold },
+                        set: { service.setWarningThreshold($0) }
+                    ),
+                    in: 1...99,
+                    step: 1
+                )
+                .tint(.orange)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Red from")
+                    Spacer()
+                    Text("\(Int(service.criticalThreshold))%")
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                Slider(
+                    value: Binding(
+                        get: { service.criticalThreshold },
+                        set: { service.setCriticalThreshold($0) }
+                    ),
+                    in: 1...99,
+                    step: 1
+                )
+                .tint(.red)
+            }
+        }
     }
 }
 
