@@ -20,7 +20,11 @@ final class MenuBarController: NSObject, NSApplicationDelegate {
 
         let popover = NSPopover()
         popover.contentSize = NSSize(width: 320, height: 380)
-        popover.behavior = .transient
+        // `.transient` auto-closes the popover whenever the app resigns active status — which
+        // happens the moment the OAuth browser flow opens a browser window. That force-closes
+        // the popover out from under the Settings/auth sheets presented on top of it, leaving
+        // them as unresponsive orphaned windows. We manage dismissal ourselves instead.
+        popover.behavior = .applicationDefined
         popover.contentViewController = NSHostingController(rootView: PopoverView(service: service))
         self.popover = popover
 
@@ -66,14 +70,13 @@ final class MenuBarController: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// `.transient` popover dismissal can be unreliable for accessory-policy (menu bar only)
-    /// apps, so we back it up with an explicit global click monitor: any mouse-down outside
+    /// Since the popover is `.applicationDefined`, we own all dismissal: any mouse-down outside
     /// this app closes the popover, like a normal widget.
     private func startOutsideClickMonitor() {
         stopOutsideClickMonitor()
         outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.closePopover()
+                self?.closePopoverUnlessSheetPresented()
             }
         }
     }
@@ -83,6 +86,14 @@ final class MenuBarController: NSObject, NSApplicationDelegate {
             NSEvent.removeMonitor(monitor)
             outsideClickMonitor = nil
         }
+    }
+
+    /// Outside clicks (e.g. in the browser during the OAuth flow) shouldn't tear down the
+    /// popover while Settings or an auth sheet is presented on top of it — that's exactly the
+    /// scenario that used to orphan those sheets. Only close when nothing is layered on top.
+    private func closePopoverUnlessSheetPresented() {
+        guard popover.contentViewController?.view.window?.attachedSheet == nil else { return }
+        closePopover()
     }
 
     private func closePopover() {
