@@ -132,10 +132,14 @@ public struct SettingsView: View {
         .sheet(item: $activeAuthSheet) { target in
             BrowserAuthSheetView(
                 target: target,
+                claudeProvider: service.claudeProvider,
                 onSave: { token in
                     handleAuthToken(token, for: target)
                 },
                 onDismiss: {
+                    if target == .claude {
+                        service.claudeProvider.authFlow.stopAuthorization()
+                    }
                     activeAuthSheet = nil
                 }
             )
@@ -143,7 +147,11 @@ public struct SettingsView: View {
     }
 
     private func connectProvider(_ target: AuthTarget) {
-        NSWorkspace.shared.open(target.initialURL)
+        if target == .claude {
+            service.claudeProvider.startOAuthLogin()
+        } else {
+            NSWorkspace.shared.open(target.initialURL)
+        }
         activeAuthSheet = target
     }
 
@@ -213,6 +221,7 @@ public struct SettingsView: View {
 
 struct BrowserAuthSheetView: View {
     let target: SettingsView.AuthTarget
+    @ObservedObject var claudeProvider: ClaudeProvider
     let onSave: (String) -> Void
     let onDismiss: () -> Void
 
@@ -231,33 +240,14 @@ struct BrowserAuthSheetView: View {
 
             Divider()
 
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 8) {
-                    Image(systemName: "safari")
-                        .font(.title2)
-                        .foregroundStyle(Color.accentColor)
-                    Text("Opened login page in your default browser.")
-                        .font(.subheadline.weight(.semibold))
-                }
-
-                Text("Authorization page has been launched in your system default browser (supporting Google Sign-In, SSO, and Passkeys). Once signed in, paste your token or authorization code below:")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Button(action: {
-                    NSWorkspace.shared.open(target.initialURL)
-                }) {
-                    Label("Re-open in Browser", systemImage: "arrow.up.right.square")
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+            if target == .claude {
+                claudeAuthView
+            } else {
+                defaultBrowserAuthView
             }
-            .padding(12)
-            .background(Color.secondary.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("OAuth / Session Token / Code:")
+                Text(target == .claude ? "Manual Fallback Token / Code:" : "OAuth / Session Token / Code:")
                     .font(.caption.weight(.medium))
 
                 SecureField("Paste OAuth token or session code...", text: $tokenInput)
@@ -282,7 +272,77 @@ struct BrowserAuthSheetView: View {
             }
         }
         .padding(20)
-        .frame(width: 460, height: 320)
+        .frame(width: 460, height: 360)
+        .onChange(of: claudeProvider.status) { _, newStatus in
+            if target == .claude && newStatus.isConnected {
+                onDismiss()
+            }
+        }
+    }
+
+    private var claudeAuthView: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Listening for localhost redirect...")
+                    .font(.subheadline.weight(.semibold))
+            }
+
+            if let urlStr = claudeProvider.authFlow.listeningURLString {
+                Text("Local callback server: \(urlStr)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text("The authorization page was opened in your browser. Once signed in, you will be automatically redirected to localhost and logged in.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if let errorMsg = claudeProvider.authFlow.errorMessage {
+                Text("Error: \(errorMsg)")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+
+            Button(action: {
+                claudeProvider.startOAuthLogin()
+            }) {
+                Label("Re-open Authorization Page", systemImage: "arrow.up.right.square")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .padding(12)
+        .background(Color.secondary.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var defaultBrowserAuthView: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "safari")
+                    .font(.title2)
+                    .foregroundStyle(Color.accentColor)
+                Text("Opened login page in your default browser.")
+                    .font(.subheadline.weight(.semibold))
+            }
+
+            Text("Authorization page has been launched in your system default browser (supporting Google Sign-In, SSO, and Passkeys). Once signed in, paste your token or authorization code below:")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Button(action: {
+                NSWorkspace.shared.open(target.initialURL)
+            }) {
+                Label("Re-open in Browser", systemImage: "arrow.up.right.square")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .padding(12)
+        .background(Color.secondary.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 

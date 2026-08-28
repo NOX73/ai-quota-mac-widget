@@ -7,7 +7,8 @@
 ## Документы в директории `doc/features/`:
 
 - **[initial-architecture.md](features/initial-architecture.md)**: Подробный архитектурный план системы, API-эндпоинты провайдеров и первоначальная структура приложения.
-- **[default-browser-auth.md](features/default-browser-auth.md)**: План и реализация авторизации через дефолтный браузер системы (решение проблемы с Google Sign-In в WKWebView) и замена legacy Keychain-фоллбека.
+- **[default-browser-auth.md](features/default-browser-auth.md)**: План и реализация авторизации через дефолтный браузер системы.
+- **[oauth-localhost-flow.md](features/oauth-localhost-flow.md)**: Архитектура автоматической CLI-style OAuth авторизации с помощью локального HTTP-сервера на `localhost:54321`.
 
 ## Сборка и запуск
 

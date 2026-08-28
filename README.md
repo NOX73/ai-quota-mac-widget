@@ -26,6 +26,7 @@ macOS menu bar application for monitoring AI subscription usage quotas across mu
 
 - **[Architecture & Initial Specs](doc/features/initial-architecture.md)**: Data sources, API endpoints, data models, and application layout.
 - **[Default Browser Authorization Flow](doc/features/default-browser-auth.md)**: System browser OAuth flow specification, sheet implementation, and removal of legacy Keychain fallbacks.
+- **[Localhost OAuth Redirect Flow](doc/features/oauth-localhost-flow.md)**: Automatic CLI-style loopback OAuth authorization using a local HTTP server on `localhost:54321`.
 
 ---
 

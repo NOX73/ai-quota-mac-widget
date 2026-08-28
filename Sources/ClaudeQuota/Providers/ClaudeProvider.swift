@@ -11,6 +11,8 @@ public final class ClaudeProvider: ObservableObject, QuotaProvider {
     @Published public private(set) var periods: [QuotaPeriod] = []
     @Published public private(set) var isLoading: Bool = false
 
+    public let authFlow = ClaudeAuthFlow()
+
     private let apiURL = URL(string: "https://api.anthropic.com/api/oauth/usage")!
 
     public init() {
@@ -28,6 +30,19 @@ public final class ClaudeProvider: ObservableObject, QuotaProvider {
         return token
     }
 
+    public func startOAuthLogin() {
+        authFlow.startAuthorization { [weak self] result in
+            Task { @MainActor in
+                switch result {
+                case .success(let token):
+                    self?.saveToken(token)
+                case .failure(let error):
+                    self?.status = .error(error.localizedDescription)
+                }
+            }
+        }
+    }
+
     public func saveToken(_ token: String) {
         _ = KeychainService.shared.save(key: "claude_oauth_token", value: token)
         status = .connected
@@ -37,6 +52,7 @@ public final class ClaudeProvider: ObservableObject, QuotaProvider {
     }
 
     public func logout() {
+        authFlow.stopAuthorization()
         KeychainService.shared.delete(key: "claude_oauth_token")
         periods = []
         status = .disconnected
