@@ -190,8 +190,9 @@ public struct SettingsView: View {
                     Button("Disconnect") {
                         provider.logout()
                     }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.secondary)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .tint(.red)
                     .padding(.leading, 6)
                 }
             } else {

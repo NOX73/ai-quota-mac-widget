@@ -7,6 +7,7 @@ final class MenuBarController: NSObject, NSApplicationDelegate {
     private var popover: NSPopover!
     private let service = AggregateQuotaService()
     private var observation: Any?
+    private var outsideClickMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -57,10 +58,35 @@ final class MenuBarController: NSObject, NSApplicationDelegate {
 
     @objc private func togglePopover() {
         if popover.isShown {
-            popover.performClose(nil)
+            closePopover()
         } else if let button = statusItem.button {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             NSApp.activate()
+            startOutsideClickMonitor()
         }
+    }
+
+    /// `.transient` popover dismissal can be unreliable for accessory-policy (menu bar only)
+    /// apps, so we back it up with an explicit global click monitor: any mouse-down outside
+    /// this app closes the popover, like a normal widget.
+    private func startOutsideClickMonitor() {
+        stopOutsideClickMonitor()
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.closePopover()
+            }
+        }
+    }
+
+    private func stopOutsideClickMonitor() {
+        if let monitor = outsideClickMonitor {
+            NSEvent.removeMonitor(monitor)
+            outsideClickMonitor = nil
+        }
+    }
+
+    private func closePopover() {
+        popover.performClose(nil)
+        stopOutsideClickMonitor()
     }
 }

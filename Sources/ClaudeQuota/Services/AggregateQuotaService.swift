@@ -14,11 +14,25 @@ public final class AggregateQuotaService: ObservableObject {
     public let googleAIProvider = GoogleAIProvider()
 
     private var timer: Timer?
+    private var providerSubscriptions: [AnyCancellable] = []
     private static let minInterval: TimeInterval = 180   // 3 min
     private static let maxInterval: TimeInterval = 1800  // 30 min
 
     public init() {
         self.providers = [claudeProvider, openAIProvider, googleAIProvider]
+
+        // Forward each provider's own @Published changes (status, periods, ...) so that
+        // views observing only `AggregateQuotaService` re-render on connect/disconnect,
+        // not just when the aggregate service's own properties change.
+        claudeProvider.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &providerSubscriptions)
+        openAIProvider.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &providerSubscriptions)
+        googleAIProvider.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &providerSubscriptions)
     }
 
     public func startPolling() {
