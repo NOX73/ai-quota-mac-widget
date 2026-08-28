@@ -93,9 +93,15 @@ public struct SettingsView: View {
             BrowserAuthSheetView(
                 target: target,
                 claudeProvider: service.claudeProvider,
+                openAIProvider: service.openAIProvider,
                 onDismiss: {
-                    if target == .claude {
+                    switch target {
+                    case .claude:
                         service.claudeProvider.authFlow.stopAuthorization()
+                    case .openAI:
+                        service.openAIProvider.authFlow.stopAuthorization()
+                    case .google:
+                        break
                     }
                     activeAuthSheet = nil
                 }
@@ -104,9 +110,12 @@ public struct SettingsView: View {
     }
 
     private func connectProvider(_ target: AuthTarget) {
-        if target == .claude {
+        switch target {
+        case .claude:
             service.claudeProvider.startOAuthLogin()
-        } else {
+        case .openAI:
+            service.openAIProvider.startOAuthLogin()
+        case .google:
             NSWorkspace.shared.open(target.initialURL)
         }
         activeAuthSheet = target
@@ -233,6 +242,7 @@ public struct SettingsView: View {
 struct BrowserAuthSheetView: View {
     let target: SettingsView.AuthTarget
     @ObservedObject var claudeProvider: ClaudeProvider
+    @ObservedObject var openAIProvider: OpenAIProvider
     let onDismiss: () -> Void
 
     var body: some View {
@@ -248,9 +258,12 @@ struct BrowserAuthSheetView: View {
 
             Divider()
 
-            if target == .claude {
+            switch target {
+            case .claude:
                 claudeAuthView
-            } else {
+            case .openAI:
+                codexAuthView
+            case .google:
                 defaultBrowserAuthView
             }
 
@@ -263,9 +276,34 @@ struct BrowserAuthSheetView: View {
                 onDismiss()
             }
         }
+        .onChange(of: openAIProvider.status) { _, newStatus in
+            if target == .openAI && newStatus.isConnected {
+                onDismiss()
+            }
+        }
     }
 
     private var claudeAuthView: some View {
+        localCallbackAuthView(
+            listeningURLString: claudeProvider.authFlow.listeningURLString,
+            errorMessage: claudeProvider.authFlow.errorMessage,
+            reopen: { claudeProvider.startOAuthLogin() }
+        )
+    }
+
+    private var codexAuthView: some View {
+        localCallbackAuthView(
+            listeningURLString: openAIProvider.authFlow.listeningURLString,
+            errorMessage: openAIProvider.authFlow.errorMessage,
+            reopen: { openAIProvider.startOAuthLogin() }
+        )
+    }
+
+    private func localCallbackAuthView(
+        listeningURLString: String?,
+        errorMessage: String?,
+        reopen: @escaping () -> Void
+    ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 ProgressView()
@@ -274,7 +312,7 @@ struct BrowserAuthSheetView: View {
                     .font(.subheadline.weight(.semibold))
             }
 
-            if let urlStr = claudeProvider.authFlow.listeningURLString {
+            if let urlStr = listeningURLString {
                 Text("Local callback server: \(urlStr)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -284,7 +322,7 @@ struct BrowserAuthSheetView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            if let errorMsg = claudeProvider.authFlow.errorMessage {
+            if let errorMsg = errorMessage {
                 ScrollView {
                     Text("Error Log:\n\(errorMsg)")
                         .font(.system(size: 11, design: .monospaced))
@@ -295,9 +333,7 @@ struct BrowserAuthSheetView: View {
                 .frame(maxHeight: 100)
             }
 
-            Button(action: {
-                claudeProvider.startOAuthLogin()
-            }) {
+            Button(action: reopen) {
                 Label("Re-open Authorization Page", systemImage: "arrow.up.right.square")
             }
             .buttonStyle(.bordered)

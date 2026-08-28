@@ -34,10 +34,30 @@ public final class ClaudeAuthFlow: ObservableObject {
         self.isAuthenticating = true
         self.errorMessage = nil
 
-        let localServer = LocalOAuthServer(preferredPort: 54321)
+        let localServer = LocalOAuthServer(preferredPort: 54321, fallbackPorts: Array(54322...54330))
         self.server = localServer
 
-        localServer.start(timeout: 180) { [weak self] result in
+        localServer.start(timeout: 180, onReady: { [weak self] readyPort in
+            guard let self = self else { return }
+            let redirectURI = "http://localhost:\(readyPort)/callback"
+            self.listeningURLString = redirectURI
+
+            var components = URLComponents(string: "https://claude.com/cai/oauth/authorize")!
+            components.queryItems = [
+                URLQueryItem(name: "code", value: "true"),
+                URLQueryItem(name: "response_type", value: "code"),
+                URLQueryItem(name: "client_id", value: Self.clientID),
+                URLQueryItem(name: "redirect_uri", value: redirectURI),
+                URLQueryItem(name: "scope", value: "user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload"),
+                URLQueryItem(name: "code_challenge", value: challenge),
+                URLQueryItem(name: "code_challenge_method", value: "S256"),
+                URLQueryItem(name: "state", value: stateToken)
+            ]
+
+            if let authURL = components.url {
+                NSWorkspace.shared.open(authURL)
+            }
+        }) { [weak self] result in
             guard let self = self else { return }
             self.isAuthenticating = false
 
@@ -71,26 +91,6 @@ public final class ClaudeAuthFlow: ObservableObject {
                 self.errorMessage = error.localizedDescription
                 completion(.failure(error))
             }
-        }
-
-        let port = localServer.listeningPort
-        let redirectURI = "http://localhost:\(port)/callback"
-        self.listeningURLString = redirectURI
-
-        var components = URLComponents(string: "https://claude.com/cai/oauth/authorize")!
-        components.queryItems = [
-            URLQueryItem(name: "code", value: "true"),
-            URLQueryItem(name: "response_type", value: "code"),
-            URLQueryItem(name: "client_id", value: Self.clientID),
-            URLQueryItem(name: "redirect_uri", value: redirectURI),
-            URLQueryItem(name: "scope", value: "user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload"),
-            URLQueryItem(name: "code_challenge", value: challenge),
-            URLQueryItem(name: "code_challenge_method", value: "S256"),
-            URLQueryItem(name: "state", value: stateToken)
-        ]
-
-        if let authURL = components.url {
-            NSWorkspace.shared.open(authURL)
         }
     }
 

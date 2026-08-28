@@ -18,19 +18,37 @@ public enum LocalOAuthServerError: Error, LocalizedError {
 public final class LocalOAuthServer: @unchecked Sendable {
     private var listener: NWListener?
     private var port: UInt16
+    /// Ports to try, in order, if `port` is already taken. These must match redirect URIs the
+    /// OAuth client actually has registered with the provider — an arbitrary/random port gets
+    /// rejected as an invalid redirect_uri before the user ever sees a login screen, so this list
+    /// should stay narrow and explicit rather than a wide scan range.
+    private var fallbackPorts: [UInt16]
     private var completionHandler: ((Result<[String: String], Error>) -> Void)?
+    /// Invoked once the listener actually reaches `.ready` on some port — callers that need to
+    /// embed the port in a redirect_uri must wait for this rather than reading `listeningPort`
+    /// right after calling `start()`, since a fallback-port retry happens asynchronously and the
+    /// port read synchronously beforehand can be stale.
+    private var onReady: ((UInt16) -> Void)?
     private let queue = DispatchQueue(label: "com.claude.quota.oauth-server")
 
-    public init(preferredPort: UInt16 = 54321) {
+    public init(preferredPort: UInt16 = 54321, fallbackPorts: [UInt16] = []) {
         self.port = preferredPort
+        self.fallbackPorts = fallbackPorts
     }
 
     public var listeningPort: UInt16 {
         return self.port
     }
 
-    public func start(timeout: TimeInterval = 180, completion: @escaping (Result<[String: String], Error>) -> Void) {
+    public func start(
+        timeout: TimeInterval = 180,
+        onReady: ((UInt16) -> Void)? = nil,
+        completion: @escaping (Result<[String: String], Error>) -> Void
+    ) {
         self.completionHandler = completion
+        if let onReady {
+            self.onReady = onReady
+        }
 
         do {
             let parameters = NWParameters.tcp
@@ -49,11 +67,17 @@ public final class LocalOAuthServer: @unchecked Sendable {
                 switch state {
                 case .ready:
                     print("Local OAuth server listening on http://127.0.0.1:\(self.port)")
+                    if let onReady = self.onReady {
+                        let readyPort = self.port
+                        DispatchQueue.main.async {
+                            onReady(readyPort)
+                        }
+                    }
                 case .failed(let error):
                     print("Local OAuth server port \(self.port) failed: \(error)")
-                    if self.port < 54330 {
+                    if !self.fallbackPorts.isEmpty {
                         self.stop()
-                        self.port += 1
+                        self.port = self.fallbackPorts.removeFirst()
                         self.start(timeout: timeout, completion: completion)
                     } else {
                         self.finish(with: .failure(LocalOAuthServerError.listenerFailed(error.localizedDescription)))
