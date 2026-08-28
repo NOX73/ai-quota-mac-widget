@@ -48,17 +48,6 @@ public final class ClaudeProvider: ObservableObject, QuotaProvider {
         }
     }
 
-    public func saveToken(_ token: String) {
-        // A manually pasted token has no known refresh counterpart.
-        KeychainService.shared.delete(key: refreshTokenKey)
-        KeychainService.shared.delete(key: expiresAtKey)
-        _ = KeychainService.shared.save(key: tokenKey, value: token)
-        status = .connected
-        Task {
-            await refresh()
-        }
-    }
-
     private func saveTokenSet(_ tokenSet: ClaudeTokenSet) {
         _ = KeychainService.shared.save(key: tokenKey, value: tokenSet.accessToken)
         if let refreshToken = tokenSet.refreshToken {

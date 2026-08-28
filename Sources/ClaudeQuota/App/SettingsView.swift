@@ -6,8 +6,6 @@ public struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var activeAuthSheet: AuthTarget?
-    @State private var customTokenInput: String = ""
-    @State private var selectedProviderForToken: String = "claude"
 
     enum AuthTarget: Identifiable {
         case claude
@@ -86,56 +84,13 @@ public struct SettingsView: View {
                     )
                 }
             }
-
-            Divider()
-
-            // Manual Token Paste option
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Manual Token Input")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-
-                HStack(spacing: 8) {
-                    Picker("Provider", selection: $selectedProviderForToken) {
-                        Text("Claude").tag("claude")
-                        Text("ChatGPT").tag("openai")
-                        Text("Google AI").tag("google")
-                    }
-                    .labelsHidden()
-                    .frame(width: 110)
-
-                    SecureField("Paste OAuth / Session token...", text: $customTokenInput)
-                        .textFieldStyle(.roundedBorder)
-
-                    Button("Save") {
-                        let token = customTokenInput.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !token.isEmpty {
-                            switch selectedProviderForToken {
-                            case "claude":
-                                service.claudeProvider.saveToken(token)
-                            case "openai":
-                                service.openAIProvider.saveToken(token)
-                            case "google":
-                                service.googleAIProvider.saveToken(token)
-                            default:
-                                break
-                            }
-                            customTokenInput = ""
-                        }
-                    }
-                    .disabled(customTokenInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
         }
         .padding(20)
-        .frame(width: 440, height: 430)
+        .frame(width: 440, height: 380)
         .sheet(item: $activeAuthSheet) { target in
             BrowserAuthSheetView(
                 target: target,
                 claudeProvider: service.claudeProvider,
-                onSave: { token in
-                    handleAuthToken(token, for: target)
-                },
                 onDismiss: {
                     if target == .claude {
                         service.claudeProvider.authFlow.stopAuthorization()
@@ -207,26 +162,12 @@ public struct SettingsView: View {
         .background(Color.secondary.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
-
-    private func handleAuthToken(_ token: String, for target: AuthTarget) {
-        switch target {
-        case .claude:
-            service.claudeProvider.saveToken(token)
-        case .openAI:
-            service.openAIProvider.saveToken(token)
-        case .google:
-            service.googleAIProvider.saveToken(token)
-        }
-    }
 }
 
 struct BrowserAuthSheetView: View {
     let target: SettingsView.AuthTarget
     @ObservedObject var claudeProvider: ClaudeProvider
-    let onSave: (String) -> Void
     let onDismiss: () -> Void
-
-    @State private var tokenInput: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -247,33 +188,10 @@ struct BrowserAuthSheetView: View {
                 defaultBrowserAuthView
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text(target == .claude ? "Manual Fallback Token / Code:" : "OAuth / Session Token / Code:")
-                    .font(.caption.weight(.medium))
-
-                SecureField("Paste OAuth token or session code...", text: $tokenInput)
-                    .textFieldStyle(.roundedBorder)
-            }
-
-            HStack {
-                Spacer()
-                Button("Cancel") {
-                    onDismiss()
-                }
-
-                Button("Save & Connect") {
-                    let cleanToken = tokenInput.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !cleanToken.isEmpty {
-                        onSave(cleanToken)
-                        onDismiss()
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(tokenInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
+            Spacer()
         }
         .padding(20)
-        .frame(width: 460, height: 360)
+        .frame(width: 440, height: 280)
         .onChange(of: claudeProvider.status) { _, newStatus in
             if target == .claude && newStatus.isConnected {
                 onDismiss()
@@ -334,7 +252,7 @@ struct BrowserAuthSheetView: View {
                     .font(.subheadline.weight(.semibold))
             }
 
-            Text("Authorization page has been launched in your system default browser (supporting Google Sign-In, SSO, and Passkeys). Once signed in, paste your token or authorization code below:")
+            Text("Automatic sign-in for this provider isn't available yet — support is coming soon.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 

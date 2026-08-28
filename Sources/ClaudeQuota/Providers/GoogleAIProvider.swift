@@ -25,14 +25,6 @@ public final class GoogleAIProvider: ObservableObject, QuotaProvider {
         KeychainService.shared.load(key: "google_oauth_token")
     }
 
-    public func saveToken(_ token: String) {
-        _ = KeychainService.shared.save(key: "google_oauth_token", value: token)
-        status = .connected
-        Task {
-            await refresh()
-        }
-    }
-
     public func logout() {
         KeychainService.shared.delete(key: "google_oauth_token")
         periods = []

@@ -25,14 +25,6 @@ public final class OpenAIProvider: ObservableObject, QuotaProvider {
         KeychainService.shared.load(key: "openai_session_token")
     }
 
-    public func saveToken(_ token: String) {
-        _ = KeychainService.shared.save(key: "openai_session_token", value: token)
-        status = .connected
-        Task {
-            await refresh()
-        }
-    }
-
     public func logout() {
         KeychainService.shared.delete(key: "openai_session_token")
         periods = []
