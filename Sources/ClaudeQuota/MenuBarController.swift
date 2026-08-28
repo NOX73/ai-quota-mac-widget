@@ -25,7 +25,6 @@ final class MenuBarController: NSObject, NSApplicationDelegate {
         // the popover out from under the Settings/auth sheets presented on top of it, leaving
         // them as unresponsive orphaned windows. We manage dismissal ourselves instead.
         popover.behavior = .applicationDefined
-        popover.contentViewController = NSHostingController(rootView: PopoverView(service: service))
         self.popover = popover
 
         observation = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
@@ -64,6 +63,12 @@ final class MenuBarController: NSObject, NSApplicationDelegate {
         if popover.isShown {
             closePopover()
         } else if let button = statusItem.button {
+            // Rebuild the hosting controller's view fresh on every open rather than reusing one
+            // created at launch. An NSHostingController that stays alive while the popover is
+            // closed can end up showing a stale SwiftUI render when reopened (e.g. after the
+            // OAuth round-trip updates provider state in the background) even though the
+            // underlying @Published data is already correct — a full rebuild sidesteps that.
+            popover.contentViewController = NSHostingController(rootView: PopoverView(service: service))
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             NSApp.activate()
             startOutsideClickMonitor()
