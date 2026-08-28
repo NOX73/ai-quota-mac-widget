@@ -2,18 +2,22 @@
 
 Виджет macOS для отображения лимитов подписок трех AI-провайдеров: Claude, OpenAI ChatGPT и Google AI Plus.
 
-## Документы в директории `doc/`:
+> **Внимание по ведению документации**: Вся документация по архитектуре, планам и реализациям фичей проекта находится и ведется строго в директории `doc/` (в частности в `doc/features/`).
 
-- **[implementation_plan.md](file:///Users/alex/src/claude_widget/doc/implementation_plan.md)**: Подробный технический план реализации, источники данных API, схемы запросов и архитектура приложения.
-- **[walkthrough.md](file:///Users/alex/src/claude_widget/doc/walkthrough.md)**: Описание выполненных изменений, структура созданных компонентов и результат сборки проекта.
+## Документы в директории `doc/features/`:
+
+- **[initial-architecture.md](features/initial-architecture.md)**: Подробный архитектурный план системы, API-эндпоинты провайдеров и первоначальная структура приложения.
+- **[default-browser-auth.md](features/default-browser-auth.md)**: План и реализация авторизации через дефолтный браузер системы (решение проблемы с Google Sign-In в WKWebView) и замена legacy Keychain-фоллбека.
 
 ## Сборка и запуск
 
 ```bash
-# Сборка проекта
+# Сборка проекта через Swift Package Manager
 swift build
 
-# Запуск приложения
-.build/debug/ClaudeQuota
-```
+# Сборка готового macOS .app бандла
+./scripts/build_app.sh
 
+# Запуск приложения
+open build/ClaudeQuota.app
+```

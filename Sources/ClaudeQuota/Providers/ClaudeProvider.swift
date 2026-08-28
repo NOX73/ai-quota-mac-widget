@@ -22,10 +22,10 @@ public final class ClaudeProvider: ObservableObject, QuotaProvider {
     }
 
     public func getToken() -> String? {
-        if let token = KeychainService.shared.load(key: "claude_oauth_token"), !token.isEmpty {
-            return token
+        guard let token = KeychainService.shared.load(key: "claude_oauth_token"), !token.isEmpty else {
+            return nil
         }
-        return KeychainService.shared.loadLegacyClaudeCodeToken()
+        return token
     }
 
     public func saveToken(_ token: String) {

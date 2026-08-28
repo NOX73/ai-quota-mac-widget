@@ -51,28 +51,5 @@ public final class KeychainService: Sendable {
         ]
         SecItemDelete(query as CFDictionary)
     }
-
-    /// Fallback reader for legacy Claude Code CLI credentials in Keychain if present
-    public func loadLegacyClaudeCodeToken() -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "Claude Code-credentials",
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
-
-        var dataTypeRef: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &dataTypeRef)
-
-        guard status == errSecSuccess,
-              let data = dataTypeRef as? Data,
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let oauth = json["claudeAiOauth"] as? [String: Any],
-              let token = oauth["accessToken"] as? String,
-              !token.isEmpty else {
-            return nil
-        }
-        return token
-    }
 }
 
