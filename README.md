@@ -2,14 +2,19 @@
 
 macOS menu bar application for monitoring AI subscription usage quotas across multiple providers: **Claude**, **Codex** (OpenAI), and **Gemini** (Google AI Plus).
 
+<p align="center">
+  <img src="doc/screenshots/popover.png" alt="Popover showing Claude and Codex session/weekly usage" width="380">
+  <img src="doc/screenshots/settings.png" alt="Settings window with Claude, Codex, and Gemini provider connections" width="380">
+</p>
+
 ## Features
 
 - **Menu Bar Status**: Each connected provider gets its own real logomark + worst-of-periods utilization percentage (e.g. `max(5h session, 7d weekly)` for Claude), color-coded green/orange/red by configurable thresholds. Icon visibility, coloring, and a "neutral until it needs attention" mode are all toggleable in Settings and persist across restarts.
 - **Multi-Provider Monitoring**:
   - **Claude**: 5-hour session quota and 7-day weekly usage limit tracking via Anthropic OAuth API — connects automatically via a localhost OAuth redirect, no copy-pasting.
-  - **Codex (OpenAI)**: 3-hour sliding message window utilization.
+  - **Codex (OpenAI)**: 5-hour session and weekly rate-limit windows, via the same OAuth flow and usage API the official Codex CLI uses — connects automatically via a localhost OAuth redirect, no copy-pasting.
   - **Gemini (Google AI Plus)**: Entitlement limits across Gemini, Claude, and GPT models.
-  - Codex and Gemini currently have no automatic connect flow of their own (manual token paste was removed) — see [`doc/features/ui-customization.md`](doc/features/ui-customization.md).
+  - Gemini currently has no automatic connect flow of its own (manual token paste was removed) — see [`doc/features/ui-customization.md`](doc/features/ui-customization.md).
 - **Default System Browser Auth**: Launch login directly in your default browser (Safari, Chrome, Arc), enabling full support for Google Sign-In, Passkeys, 2FA, and SAML SSO.
 - **Secure Storage**: Credentials stored in macOS System Keychain via standard Security framework APIs (`com.claude.quota.widget`).
 
