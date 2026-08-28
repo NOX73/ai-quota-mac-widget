@@ -96,13 +96,21 @@ public final class AntigravityProvider: ObservableObject, QuotaProvider {
         status = .connected
     }
 
+    /// Outcome of a refresh attempt, distinguishing a dead refresh token (needs a fresh login)
+    /// from a transient failure (network hiccup, Google-side 5xx) that's worth retrying on the
+    /// next scheduled poll without bothering the user.
+    private enum RefreshOutcome {
+        case success
+        case transientFailure
+        case permanentFailure
+    }
+
     /// Exchanges the stored refresh token for a new access token and persists the result.
     /// Google's refresh grant normally omits `refresh_token` (no rotation), so the existing
-    /// one is kept when that happens. Returns false if there's no refresh token or the refresh
-    /// request itself fails.
-    private func attemptTokenRefresh() async -> Bool {
+    /// one is kept when that happens.
+    private func attemptTokenRefresh() async -> RefreshOutcome {
         guard let refreshToken = loadState()?.refreshToken, !refreshToken.isEmpty else {
-            return false
+            return .permanentFailure
         }
         do {
             let tokenSet = try await AntigravityAuthFlow.refreshAccessToken(refreshToken: refreshToken)
@@ -111,9 +119,12 @@ public final class AntigravityProvider: ObservableObject, QuotaProvider {
                 refreshToken: tokenSet.refreshToken ?? refreshToken,
                 expiresIn: tokenSet.expiresIn
             ))
-            return true
+            return .success
+        } catch let error as AntigravityAuthError {
+            if case .permanent = error { return .permanentFailure }
+            return .transientFailure
         } catch {
-            return false
+            return .transientFailure
         }
     }
 
@@ -159,13 +170,20 @@ public final class AntigravityProvider: ObservableObject, QuotaProvider {
         let httpStatus = await fetchQuota(token: token, projectID: getProjectID())
 
         if httpStatus == 401 {
-            if await attemptTokenRefresh(), let refreshedToken = getToken() {
-                let retryStatus = await fetchQuota(token: refreshedToken, projectID: getProjectID())
-                if retryStatus == 401 {
-                    status = .requiresReauth
+            switch await attemptTokenRefresh() {
+            case .success:
+                if let refreshedToken = getToken() {
+                    let retryStatus = await fetchQuota(token: refreshedToken, projectID: getProjectID())
+                    if retryStatus == 401 {
+                        status = .requiresReauth
+                    }
                 }
-            } else {
+            case .permanentFailure:
                 status = .requiresReauth
+            case .transientFailure:
+                // Network/server hiccup, not a dead refresh token — leave the stored credentials
+                // alone and let the next scheduled poll retry instead of forcing a re-login.
+                status = .error("Antigravity temporarily unreachable")
             }
         }
     }

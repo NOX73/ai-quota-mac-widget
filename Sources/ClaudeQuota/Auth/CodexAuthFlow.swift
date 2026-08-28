@@ -8,6 +8,21 @@ public struct CodexTokenSet {
     public let idToken: String?
 }
 
+/// Distinguishes a token endpoint outright rejecting the request (the refresh token itself is
+/// dead — e.g. revoked/expired, reported via HTTP 4xx) from a transient failure (network hiccup,
+/// timeout, server-side 5xx) worth retrying later without forcing the user to log in again.
+public enum CodexAuthError: LocalizedError {
+    case permanent(String)
+    case transient(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .permanent(let message), .transient(let message):
+            return message
+        }
+    }
+}
+
 @MainActor
 public final class CodexAuthFlow: ObservableObject {
     /// Public OAuth client id used by the official Codex CLI, discovered by inspecting the
@@ -175,9 +190,17 @@ public final class CodexAuthFlow: ObservableObject {
             "refresh_token": refreshToken
         ])
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            // Transport-level failure (offline, DNS, timeout, ...) — says nothing about whether
+            // the refresh token itself is still good.
+            throw CodexAuthError.transient(error.localizedDescription)
+        }
+
         guard let http = response as? HTTPURLResponse else {
-            throw NSError(domain: "CodexAuth", code: -401, userInfo: [NSLocalizedDescriptionKey: "No HTTP response from token endpoint"])
+            throw CodexAuthError.transient("No HTTP response from token endpoint")
         }
 
         if http.statusCode == 200,
@@ -192,7 +215,13 @@ public final class CodexAuthFlow: ObservableObject {
 
         let responseStr = String(data: data, encoding: .utf8) ?? "HTTP \(http.statusCode)"
         let msg = "Token refresh failed (HTTP \(http.statusCode)): \(responseStr)"
-        throw NSError(domain: "CodexAuth", code: -403, userInfo: [NSLocalizedDescriptionKey: msg])
+        // OAuth2 token errors (invalid_grant, invalid_client, ...) are reported as 4xx per spec —
+        // that's a definitive "this refresh token is dead". A 5xx is the server having a bad
+        // moment and says nothing about the token, so treat it as retryable instead.
+        if (400...499).contains(http.statusCode) {
+            throw CodexAuthError.permanent(msg)
+        }
+        throw CodexAuthError.transient(msg)
     }
 
     private static func formEncode(_ params: [String: String]) -> String {

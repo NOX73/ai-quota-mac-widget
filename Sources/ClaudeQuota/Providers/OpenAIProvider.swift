@@ -83,18 +83,29 @@ public final class OpenAIProvider: ObservableObject, QuotaProvider {
         status = .connected
     }
 
+    /// Outcome of a refresh attempt, distinguishing a dead refresh token (needs a fresh login)
+    /// from a transient failure (network hiccup, server-side 5xx) that's worth retrying on the
+    /// next scheduled poll without bothering the user.
+    private enum RefreshOutcome {
+        case success
+        case transientFailure
+        case permanentFailure
+    }
+
     /// Exchanges the stored refresh token for a new access token and persists the result.
-    /// Returns false if there's no refresh token or the refresh request itself fails.
-    private func attemptTokenRefresh() async -> Bool {
+    private func attemptTokenRefresh() async -> RefreshOutcome {
         guard let refreshToken = loadState()?.refreshToken, !refreshToken.isEmpty else {
-            return false
+            return .permanentFailure
         }
         do {
             let tokenSet = try await CodexAuthFlow.refreshAccessToken(refreshToken: refreshToken)
             saveTokenSet(tokenSet)
-            return true
+            return .success
+        } catch let error as CodexAuthError {
+            if case .permanent = error { return .permanentFailure }
+            return .transientFailure
         } catch {
-            return false
+            return .transientFailure
         }
     }
 
@@ -137,15 +148,22 @@ public final class OpenAIProvider: ObservableObject, QuotaProvider {
         let httpStatus = await fetchUsage(token: token, accountID: getAccountID())
 
         if httpStatus == 401 {
-            if await attemptTokenRefresh(), let refreshedToken = getToken() {
-                let retryStatus = await fetchUsage(token: refreshedToken, accountID: getAccountID())
-                if retryStatus == 401 {
-                    // The refreshed token is still rejected by the usage endpoint — don't leave
-                    // the provider stuck showing "Connected" with permanently empty periods.
-                    status = .requiresReauth
+            switch await attemptTokenRefresh() {
+            case .success:
+                if let refreshedToken = getToken() {
+                    let retryStatus = await fetchUsage(token: refreshedToken, accountID: getAccountID())
+                    if retryStatus == 401 {
+                        // The refreshed token is still rejected by the usage endpoint — don't
+                        // leave the provider stuck showing "Connected" with empty periods.
+                        status = .requiresReauth
+                    }
                 }
-            } else {
+            case .permanentFailure:
                 status = .requiresReauth
+            case .transientFailure:
+                // Network/server hiccup, not a dead refresh token — leave the stored credentials
+                // alone and let the next scheduled poll retry instead of forcing a re-login.
+                status = .error("Codex temporarily unreachable")
             }
         }
     }

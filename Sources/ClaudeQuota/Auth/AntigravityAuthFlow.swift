@@ -8,6 +8,21 @@ public struct AntigravityTokenSet {
     public let expiresIn: Double?
 }
 
+/// Distinguishes a token endpoint outright rejecting the request (the refresh token itself is
+/// dead — e.g. revoked/expired, reported via HTTP 4xx) from a transient failure (network hiccup,
+/// timeout, Google-side 5xx) worth retrying later without forcing the user to log in again.
+public enum AntigravityAuthError: LocalizedError {
+    case permanent(String)
+    case transient(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .permanent(let message), .transient(let message):
+            return message
+        }
+    }
+}
+
 @MainActor
 public final class AntigravityAuthFlow: ObservableObject {
     /// Public OAuth client used by Google's Antigravity CLI/IDE, discovered by inspecting the
@@ -163,9 +178,17 @@ public final class AntigravityAuthFlow: ObservableObject {
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.httpBody = formEncode(body).data(using: .utf8)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            // Transport-level failure (offline, DNS, timeout, ...) — says nothing about whether
+            // the refresh token itself is still good.
+            throw AntigravityAuthError.transient(error.localizedDescription)
+        }
+
         guard let http = response as? HTTPURLResponse else {
-            throw NSError(domain: "AntigravityAuth", code: -401, userInfo: [NSLocalizedDescriptionKey: "No HTTP response from token endpoint"])
+            throw AntigravityAuthError.transient("No HTTP response from token endpoint")
         }
 
         if http.statusCode == 200,
@@ -180,7 +203,13 @@ public final class AntigravityAuthFlow: ObservableObject {
 
         let responseStr = String(data: data, encoding: .utf8) ?? "HTTP \(http.statusCode)"
         let msg = "Token request failed (HTTP \(http.statusCode)): \(responseStr)"
-        throw NSError(domain: "AntigravityAuth", code: -402, userInfo: [NSLocalizedDescriptionKey: msg])
+        // OAuth2 token errors (invalid_grant, invalid_client, ...) are reported as 4xx per spec —
+        // that's a definitive "this refresh token is dead". A 5xx is Google's server having a bad
+        // moment and says nothing about the token, so treat it as retryable instead.
+        if (400...499).contains(http.statusCode) {
+            throw AntigravityAuthError.permanent(msg)
+        }
+        throw AntigravityAuthError.transient(msg)
     }
 
     private static func formEncode(_ params: [String: String]) -> String {

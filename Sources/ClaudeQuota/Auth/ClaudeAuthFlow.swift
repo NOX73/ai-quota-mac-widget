@@ -8,6 +8,21 @@ public struct ClaudeTokenSet {
     public let expiresAt: Date?
 }
 
+/// Distinguishes a token endpoint outright rejecting the request (the refresh token itself is
+/// dead — e.g. revoked/expired, reported via HTTP 4xx) from a transient failure (network hiccup,
+/// timeout, server-side 5xx) worth retrying later without forcing the user to log in again.
+public enum ClaudeAuthError: LocalizedError {
+    case permanent(String)
+    case transient(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .permanent(let message), .transient(let message):
+            return message
+        }
+    }
+}
+
 @MainActor
 public final class ClaudeAuthFlow: ObservableObject {
     public static let clientID = GeneratedCredentials.claudeClientID
@@ -141,9 +156,17 @@ public final class ClaudeAuthFlow: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            // Transport-level failure (offline, DNS, timeout, ...) — says nothing about whether
+            // the refresh token itself is still good.
+            throw ClaudeAuthError.transient(error.localizedDescription)
+        }
+
         guard let http = response as? HTTPURLResponse else {
-            throw NSError(domain: "ClaudeAuth", code: -401, userInfo: [NSLocalizedDescriptionKey: "No HTTP response from token endpoint"])
+            throw ClaudeAuthError.transient("No HTTP response from token endpoint")
         }
 
         if http.statusCode == 200,
@@ -155,7 +178,13 @@ public final class ClaudeAuthFlow: ObservableObject {
 
         let responseStr = String(data: data, encoding: .utf8) ?? "HTTP \(http.statusCode)"
         let msg = "Token request failed (HTTP \(http.statusCode)): \(responseStr)"
-        throw NSError(domain: "ClaudeAuth", code: -402, userInfo: [NSLocalizedDescriptionKey: msg])
+        // OAuth2 token errors (invalid_grant, invalid_client, ...) are reported as 4xx per spec —
+        // that's a definitive "this refresh token is dead". A 5xx is the server having a bad
+        // moment and says nothing about the token, so treat it as retryable instead.
+        if (400...499).contains(http.statusCode) {
+            throw ClaudeAuthError.permanent(msg)
+        }
+        throw ClaudeAuthError.transient(msg)
     }
 
     /// Exchanges a stored refresh token for a new access token, per the same endpoint the CLI uses.
