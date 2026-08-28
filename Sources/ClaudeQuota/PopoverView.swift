@@ -3,6 +3,12 @@ import SwiftUI
 public struct PopoverView: View {
     @ObservedObject var service: AggregateQuotaService
     @State private var showingSettings = false
+    var onSettingsDismissed: (() -> Void)?
+
+    public init(service: AggregateQuotaService, onSettingsDismissed: (() -> Void)? = nil) {
+        self.service = service
+        self.onSettingsDismissed = onSettingsDismissed
+    }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -86,7 +92,7 @@ public struct PopoverView: View {
         }
         .padding(16)
         .frame(width: 320, height: 380)
-        .sheet(isPresented: $showingSettings) {
+        .sheet(isPresented: $showingSettings, onDismiss: { onSettingsDismissed?() }) {
             SettingsView(service: service)
         }
     }

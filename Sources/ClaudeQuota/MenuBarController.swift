@@ -68,11 +68,27 @@ final class MenuBarController: NSObject, NSApplicationDelegate {
             // closed can end up showing a stale SwiftUI render when reopened (e.g. after the
             // OAuth round-trip updates provider state in the background) even though the
             // underlying @Published data is already correct — a full rebuild sidesteps that.
-            popover.contentViewController = NSHostingController(rootView: PopoverView(service: service))
+            popover.contentViewController = makePopoverContentViewController()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             NSApp.activate()
             startOutsideClickMonitor()
         }
+    }
+
+    private func makePopoverContentViewController() -> NSHostingController<PopoverView> {
+        NSHostingController(rootView: PopoverView(service: service, onSettingsDismissed: { [weak self] in
+            self?.rebuildPopoverContentIfShown()
+        }))
+    }
+
+    /// The popover can stay open through the whole Settings → OAuth-in-browser → back-to-Settings
+    /// round trip without ever being closed and reopened. Its live SwiftUI view doesn't reliably
+    /// pick up provider state that changed while obscured behind those sheets, so once Settings
+    /// is dismissed (the moment the user returns to looking at the popover), force a fresh render
+    /// the same way a manual close/reopen already does.
+    private func rebuildPopoverContentIfShown() {
+        guard popover.isShown, popover.contentViewController?.view.window?.attachedSheet == nil else { return }
+        popover.contentViewController = makePopoverContentViewController()
     }
 
     /// Since the popover is `.applicationDefined`, we own all dismissal: any mouse-down outside
