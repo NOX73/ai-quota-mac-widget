@@ -23,6 +23,13 @@ Instead of requiring users to copy and paste authorization codes or tokens manua
    - On callback, exchanges the authorization code for an access token via a JSON POST to `https://platform.claude.com/v1/oauth/token` — or uses the value directly if it's already an `sk-` API key.
    - The token exchange body sends `grant_type`, `code`, `redirect_uri` (the **same** loopback URL used for the browser callback — not a fixed console URL), `client_id`, `code_verifier`, and `state`.
    - These exact values (hosts, param names, `code=true`, scopes) were confirmed by inspecting the official Claude Code CLI binary (`resources/native-binary/claude` inside the VS Code extension), not guessed — earlier attempts using `claude.ai/oauth/authorize`, `api.anthropic.com`, and `console.anthropic.com` were all wrong/stale endpoints.
+   - Exposes `ClaudeAuthFlow.refreshAccessToken(refreshToken:)`, which POSTs `grant_type=refresh_token` to the same token endpoint — used by `ClaudeProvider` to renew expired access tokens without a fresh browser login.
+
+## Token storage and refresh
+
+- Access token, refresh token, and expiry are stored separately in Keychain under `claude_oauth_token`, `claude_oauth_refresh_token`, and `claude_oauth_expires_at` (see `ClaudeProvider`).
+- Before each quota fetch, `ClaudeProvider.refresh()` proactively renews the access token if it's within 60s of `expires_in`. If a fetch still comes back `401` (e.g. clock drift, revoked token), it retries the refresh once and re-fetches before falling back to `.requiresReauth`.
+- A refresh only works if a refresh token was captured, which only happens via the OAuth browser flow — tokens pasted manually through "Manual Token Input" have no refresh counterpart and will require re-pasting once they expire.
    - Persists the access token into macOS Keychain (`claude_oauth_token`).
 
 3. **`ClaudeProvider` & `SettingsView` (`Sources/ClaudeQuota/Providers/ClaudeProvider.swift` & `App/SettingsView.swift`)**:

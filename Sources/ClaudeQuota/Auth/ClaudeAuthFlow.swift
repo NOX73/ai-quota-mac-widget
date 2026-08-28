@@ -2,8 +2,16 @@ import Foundation
 import CryptoKit
 import AppKit
 
+public struct ClaudeTokenSet {
+    public let accessToken: String
+    public let refreshToken: String?
+    public let expiresAt: Date?
+}
+
 @MainActor
 public final class ClaudeAuthFlow: ObservableObject {
+    public static let clientID = "xxxxxxx"
+
     @Published public private(set) var isAuthenticating: Bool = false
     @Published public private(set) var listeningURLString: String?
     @Published public private(set) var errorMessage: String?
@@ -14,7 +22,7 @@ public final class ClaudeAuthFlow: ObservableObject {
 
     public init() {}
 
-    public func startAuthorization(completion: @escaping (Result<String, Error>) -> Void) {
+    public func startAuthorization(completion: @escaping (Result<ClaudeTokenSet, Error>) -> Void) {
         stopAuthorization()
 
         let verifier = generateCodeVerifier()
@@ -52,7 +60,7 @@ public final class ClaudeAuthFlow: ObservableObject {
                 if let code = queryParams["code"] {
                     self.exchangeCodeForToken(code: code, state: queryParams["state"], verifier: verifier, completion: completion)
                 } else if let token = queryParams["token"] ?? queryParams["access_token"] {
-                    completion(.success(token))
+                    completion(.success(ClaudeTokenSet(accessToken: token, refreshToken: nil, expiresAt: nil)))
                 } else {
                     let err = "No authorization code or token found in callback response"
                     self.errorMessage = err
@@ -73,7 +81,7 @@ public final class ClaudeAuthFlow: ObservableObject {
         components.queryItems = [
             URLQueryItem(name: "code", value: "true"),
             URLQueryItem(name: "response_type", value: "code"),
-            URLQueryItem(name: "client_id", value: "xxxxxxx"),
+            URLQueryItem(name: "client_id", value: Self.clientID),
             URLQueryItem(name: "redirect_uri", value: redirectURI),
             URLQueryItem(name: "scope", value: "user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload"),
             URLQueryItem(name: "code_challenge", value: challenge),
@@ -93,59 +101,44 @@ public final class ClaudeAuthFlow: ObservableObject {
         listeningURLString = nil
     }
 
-    private func exchangeCodeForToken(code: String, state: String?, verifier: String, completion: @escaping (Result<String, Error>) -> Void) {
+    private func exchangeCodeForToken(code: String, state: String?, verifier: String, completion: @escaping (Result<ClaudeTokenSet, Error>) -> Void) {
         if code.hasPrefix("sk-") {
-            completion(.success(code))
+            completion(.success(ClaudeTokenSet(accessToken: code, refreshToken: nil, expiresAt: nil)))
             return
         }
 
         let redirectURI = listeningURLString ?? "http://localhost:54321/callback"
-        let clientID = "xxxxxxx"
 
         Task {
             do {
-                let token = try await self.performTokenExchange(
-                    clientID: clientID,
-                    code: code,
-                    state: state,
-                    redirectURI: redirectURI,
-                    verifier: verifier
-                )
-                completion(.success(token))
+                let body: [String: Any] = [
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": redirectURI,
+                    "client_id": Self.clientID,
+                    "code_verifier": verifier,
+                    "state": state ?? ""
+                ]
+                let tokenSet = try await Self.performTokenRequest(body: body)
+                completion(.success(tokenSet))
             } catch {
                 let errMsg = error.localizedDescription
-                await MainActor.run {
-                    self.errorMessage = errMsg
-                }
+                self.errorMessage = errMsg
                 completion(.failure(error))
             }
         }
     }
 
     /// Mirrors the exact request the official Claude Code CLI sends (verified by inspecting its
-    /// shipped binary): JSON POST to platform.claude.com, redirect_uri equal to the loopback URL
-    /// actually used for the browser callback (not a fixed console URL).
-    private func performTokenExchange(
-        clientID: String,
-        code: String,
-        state: String?,
-        redirectURI: String,
-        verifier: String
-    ) async throws -> String {
+    /// shipped binary): JSON POST to platform.claude.com. Used for both the authorization_code
+    /// exchange (redirect_uri equal to the loopback URL used for the browser callback, not a
+    /// fixed console URL) and refresh_token renewals.
+    static func performTokenRequest(body: [String: Any]) async throws -> ClaudeTokenSet {
         let url = URL(string: "https://platform.claude.com/v1/oauth/token")!
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let body: [String: Any] = [
-            "grant_type": "authorization_code",
-            "code": code,
-            "redirect_uri": redirectURI,
-            "client_id": clientID,
-            "code_verifier": verifier,
-            "state": state ?? ""
-        ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -156,12 +149,22 @@ public final class ClaudeAuthFlow: ObservableObject {
         if http.statusCode == 200,
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let accessToken = json["access_token"] as? String {
-            return accessToken
+            let expiresAt = (json["expires_in"] as? Double).map { Date().addingTimeInterval($0) }
+            return ClaudeTokenSet(accessToken: accessToken, refreshToken: json["refresh_token"] as? String, expiresAt: expiresAt)
         }
 
         let responseStr = String(data: data, encoding: .utf8) ?? "HTTP \(http.statusCode)"
-        let msg = "Token exchange failed (HTTP \(http.statusCode)): \(responseStr)"
+        let msg = "Token request failed (HTTP \(http.statusCode)): \(responseStr)"
         throw NSError(domain: "ClaudeAuth", code: -402, userInfo: [NSLocalizedDescriptionKey: msg])
+    }
+
+    /// Exchanges a stored refresh token for a new access token, per the same endpoint the CLI uses.
+    public static func refreshAccessToken(refreshToken: String) async throws -> ClaudeTokenSet {
+        try await performTokenRequest(body: [
+            "grant_type": "refresh_token",
+            "refresh_token": refreshToken,
+            "client_id": clientID
+        ])
     }
 
     private func generateCodeVerifier() -> String {
