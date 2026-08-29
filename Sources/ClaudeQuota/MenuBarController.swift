@@ -45,11 +45,16 @@ final class MenuBarController: NSObject, NSApplicationDelegate {
 
     private static let trayFont = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium)
     private static let trayIconSize = NSSize(width: 13, height: 13)
+    private static let trayBarHeight: CGFloat = 2
+    private static let trayBarGap: CGFloat = 2
+    private static let trayBlockSpacing: CGFloat = 7
+    private static let trayIconTextGap: CGFloat = 3
 
     private func updateButton(_ button: NSStatusBarButton) {
         let connected = service.providers.filter { $0.status.isConnected }
 
         guard !connected.isEmpty else {
+            button.image = nil
             button.attributedTitle = NSAttributedString(string: "AI Quota", attributes: [
                 .foregroundColor: NSColor.secondaryLabelColor,
                 .font: Self.trayFont
@@ -57,32 +62,87 @@ final class MenuBarController: NSObject, NSApplicationDelegate {
             return
         }
 
-        let title = NSMutableAttributedString()
-        for (index, provider) in connected.enumerated() {
-            if index > 0 {
-                title.append(NSAttributedString(string: "  "))
+        button.attributedTitle = NSAttributedString(string: "")
+        button.imagePosition = .imageOnly
+        button.image = renderTrayImage(for: connected)
+    }
+
+    /// One provider's rendered block: the session (primary) percentage on top — the number
+    /// people actually watch minute to minute — with a hairline progress bar for the worst
+    /// *other* period (weekly, per-model, …) underneath, so a limit that's creeping up in the
+    /// background stays visible without drowning out the primary number the way folding
+    /// everything into a single max() used to.
+    private struct TrayBlock {
+        let icon: NSImage?
+        let text: NSAttributedString
+        let textSize: NSSize
+        let barFraction: CGFloat?
+        let barColor: NSColor
+        let width: CGFloat
+    }
+
+    private func makeTrayBlock(for provider: any QuotaProvider) -> TrayBlock {
+        let primaryColor = trayColor(for: provider.primaryUtilization)
+        let text = provider.primaryUtilization.map { "\(Int($0))%" } ?? "–%"
+        let attributedText = NSAttributedString(string: text, attributes: [
+            .foregroundColor: primaryColor,
+            .font: Self.trayFont
+        ])
+        let textSize = attributedText.size()
+
+        let icon = service.showTrayIcon ? tintedTrayIcon(forProviderID: provider.id, color: primaryColor) : nil
+        let iconWidth = icon != nil ? Self.trayIconSize.width + Self.trayIconTextGap : 0
+
+        let secondary = provider.secondaryUtilization
+        let barFraction = secondary.map { CGFloat(min(max($0, 0), 100)) / 100 }
+
+        return TrayBlock(
+            icon: icon,
+            text: attributedText,
+            textSize: textSize,
+            barFraction: barFraction,
+            barColor: trayColor(for: secondary),
+            width: iconWidth + textSize.width
+        )
+    }
+
+    private func renderTrayImage(for providers: [any QuotaProvider]) -> NSImage {
+        let blocks = providers.map(makeTrayBlock)
+        let height = NSStatusBar.system.thickness
+        let totalWidth = blocks.reduce(0) { $0 + $1.width } + CGFloat(max(0, blocks.count - 1)) * Self.trayBlockSpacing
+
+        let image = NSImage(size: NSSize(width: max(1, totalWidth), height: height), flipped: true) { rect in
+            let topRegionHeight = rect.height - Self.trayBarHeight - Self.trayBarGap
+            let barY = rect.height - Self.trayBarHeight
+            var x: CGFloat = 0
+
+            for block in blocks {
+                var textX = x
+                if let icon = block.icon {
+                    let iconY = (topRegionHeight - Self.trayIconSize.height) / 2
+                    icon.draw(in: CGRect(x: x, y: iconY, width: Self.trayIconSize.width, height: Self.trayIconSize.height))
+                    textX += Self.trayIconSize.width + Self.trayIconTextGap
+                }
+
+                let textY = (topRegionHeight - block.textSize.height) / 2
+                block.text.draw(at: CGPoint(x: textX, y: textY))
+
+                if let fraction = block.barFraction {
+                    NSColor.tertiaryLabelColor.withAlphaComponent(0.5)
+                        .setFill()
+                    NSBezierPath(rect: CGRect(x: x, y: barY, width: block.width, height: Self.trayBarHeight)).fill()
+
+                    if fraction > 0 {
+                        block.barColor.setFill()
+                        NSBezierPath(rect: CGRect(x: x, y: barY, width: block.width * fraction, height: Self.trayBarHeight)).fill()
+                    }
+                }
+
+                x += block.width + Self.trayBlockSpacing
             }
-
-            let pct = provider.worstUtilization
-            let color = trayColor(for: pct)
-
-            if service.showTrayIcon {
-                let icon = tintedTrayIcon(forProviderID: provider.id, color: color)
-                let attachment = NSTextAttachment()
-                attachment.image = icon
-                attachment.bounds = CGRect(x: 0, y: -3, width: Self.trayIconSize.width, height: Self.trayIconSize.height)
-                title.append(NSAttributedString(attachment: attachment))
-                title.append(NSAttributedString(string: " "))
-            }
-
-            let text = pct.map { "\(Int($0))%" } ?? "–%"
-            title.append(NSAttributedString(string: text, attributes: [
-                .foregroundColor: color,
-                .font: Self.trayFont
-            ]))
+            return true
         }
-
-        button.attributedTitle = title
+        return image
     }
 
     private func trayColor(for utilization: Double?) -> NSColor {

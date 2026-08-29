@@ -15,11 +15,18 @@ public protocol QuotaProvider: AnyObject, ObservableObject {
 }
 
 public extension QuotaProvider {
-    /// The single percentage summarizing this provider for compact display (menu bar, etc):
-    /// the worst (highest) of its periods' utilization, e.g. max(5h session, 7d weekly) for
-    /// Claude — whichever limit you'll hit first.
-    var worstUtilization: Double? {
-        periods.compactMap(\.utilization).max()
+    /// The provider's shortest/most-immediate period (e.g. the 5h session for Claude), which
+    /// every provider lists first — the number people actually watch minute to minute, since
+    /// the longer windows (weekly, per-model) rarely bind first.
+    var primaryUtilization: Double? {
+        periods.first?.utilization
+    }
+
+    /// The worst of the *other* periods (weekly, per-model, …) — shown as a secondary signal
+    /// rather than folded into the headline number, so a high weekly reading doesn't drown out
+    /// the session percentage that's usually what's actually about to block.
+    var secondaryUtilization: Double? {
+        periods.dropFirst().compactMap(\.utilization).max()
     }
 }
 

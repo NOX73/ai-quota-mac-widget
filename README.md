@@ -9,7 +9,7 @@ macOS menu bar application for monitoring AI subscription usage quotas across mu
 
 ## Features
 
-- **Menu Bar Status**: Each connected provider gets its own real logomark + worst-of-periods utilization percentage (e.g. `max(5h session, 7d weekly)` for Claude), color-coded green/orange/red by configurable thresholds. Icon visibility, coloring, and a "neutral until it needs attention" mode are all toggleable in Settings and persist across restarts.
+- **Menu Bar Status**: Each connected provider gets its own real logomark + its primary period's utilization percentage (e.g. the 5h session for Claude), color-coded green/orange/red by configurable thresholds, with a hairline progress bar underneath showing the worst of its other periods (e.g. 7d weekly). Icon visibility, coloring, and a "neutral until it needs attention" mode are all toggleable in Settings and persist across restarts.
 - **Multi-Provider Monitoring**:
   - **Claude**: 5-hour session quota and 7-day weekly usage limit tracking via Anthropic OAuth API — connects automatically via a localhost OAuth redirect, no copy-pasting.
   - **Codex (OpenAI)**: 5-hour session and weekly rate-limit windows, via the same OAuth flow and usage API the official Codex CLI uses — connects automatically via a localhost OAuth redirect, no copy-pasting.
