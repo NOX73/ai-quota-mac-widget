@@ -205,8 +205,9 @@ public final class AntigravityAuthFlow: ObservableObject {
         let msg = "Token request failed (HTTP \(http.statusCode)): \(responseStr)"
         // OAuth2 token errors (invalid_grant, invalid_client, ...) are reported as 4xx per spec —
         // that's a definitive "this refresh token is dead". A 5xx is Google's server having a bad
-        // moment and says nothing about the token, so treat it as retryable instead.
-        if (400...499).contains(http.statusCode) {
+        // moment and says nothing about the token, so treat it as retryable instead. 429 is also
+        // a 4xx but means "rate limited", not "token invalid" — retryable too.
+        if http.statusCode != 429, (400...499).contains(http.statusCode) {
             throw AntigravityAuthError.permanent(msg)
         }
         throw AntigravityAuthError.transient(msg)
